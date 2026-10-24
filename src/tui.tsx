@@ -130,11 +130,19 @@ function ModelOverviewPanel(props: {
         borderColor={context.theme.border.base}
         backgroundColor={context.theme.background.raised.base}
         title="Model Overview"
-        bottomTitle="esc closes · click header to collapse · /model-overview toggle"
+        bottomTitle={
+          props.controller.headerCollapseEnabled
+            ? "esc closes · click header to collapse · /model-overview toggle"
+            : "esc closes · /model-overview toggle"
+        }
         bottomTitleAlignment="right"
       >
         <box flexDirection="row" gap={1} paddingLeft={1} onMouse={props.controller.toggleCollapsed}>
-          <text fg={context.theme.text.base}>{vl_collapsed() ? "▸" : "▾"} Model Overview</text>
+          <text fg={context.theme.text.base}>
+            {props.controller.headerCollapseEnabled
+              ? `${vl_collapsed() ? "▸" : "▾"} Model Overview`
+              : "Model Overview"}
+          </text>
           <text fg={context.theme.text.faint}>
             {vl_modelCount()} models{props.controller.loading() ? " · refreshing…" : ""}
           </text>

@@ -62,6 +62,7 @@ Additions required by the real toolchain (strictness was **not** weakened):
 ## direnv notes (spec §5.5, §2.1)
 
 - `.envrc` holds safe defaults only; credentials (`HUGGINGFACE_TOKEN`, `OPENCODE_INFERENCE_API_KEY`) are commented out and must be exported locally, never committed.
+- `OPENCODE_MODEL_OVERVIEW_HEADER_COLLAPSE` is an opt-in UI flag (default off): truthy values enable header-click collapse of the overview panel; when off, the panel always starts expanded and the header click is a no-op. Like all env vars, it must be exported in the environment that launches the TUI.
 - direnv loads variables into the **dev shell**. It does **not** automatically expose them to every OpenCode process (e.g. GUI launches). The plugin must read its environment at actual runtime and degrade gracefully when variables are absent.
 
 ## Loading the plugin during development

@@ -259,6 +259,13 @@ tunable), schema version, atomic writes in a user cache dir, in-flight dedup, la
   Verified: no fetch on panel open/toggle/sort; refetch only on explicit refresh.
 - **Gate result:** `bun run check` green — typecheck, lint, 150 tests / 483 assertions across 11 files.
   Owner visual run still to do (checklist in `docs/architecture/ui-integration.md`).
+- **Adjustment (owner request, 2026-10-24):** header-click collapse is now opt-in via
+  `OPENCODE_MODEL_OVERVIEW_HEADER_COLLAPSE` (default off → panel always opens expanded; indicator
+  hidden when off; stale persisted `collapsed: true` normalized to expanded on load). The gesture
+  itself is kept. `panel-controller` exposes `headerCollapseEnabled` with pure helpers
+  `f_resolveHeaderCollapseEnabled` / `f_resolveCollapsedState`; `.envrc`/`.env.example`,
+  `docs/development.md`, and `docs/architecture/ui-integration.md` updated.
+  Re-verified: `bun run check` green — **152 tests / 501 assertions**.
 
 ### Phase 7 — Testing, security, CI
 Unit suite (normalization, aliases, price units incl. no double-scaling, score→rank, sort directions/ties/missing,

@@ -166,10 +166,10 @@ startup. Benchmark/model data lives only in the file cache
 
 ## Panel behaviour (Phase 6)
 
-1. `session.panel` renders a bordered, titled table with a clickable header
-   row (collapse/expand, `▸`/`▾`), ranking chips (`GPQA` / `LiveCodeBench`),
-   a `[refresh]` chip, a search `<input>`, and filter chips
-   (`free`, `missing GPQA`, `missing LCB`).
+1. `session.panel` renders a bordered, titled table with a header row that is
+   clickable only when header-click collapse is enabled (see item 7), ranking
+   chips (`GPQA` / `LiveCodeBench`), a `[refresh]` chip, a search `<input>`, and
+   filter chips (`free`, `missing GPQA`, `missing LCB`).
 2. Columns: Model, Provider, Ctx, In $/M, Out $/M, GPQA, LCB — each sortable
    column header is clickable and shows `▲`/`▼` when active. Missing values
    render as `—`; benchmark cells show `#rank score`.
@@ -181,14 +181,22 @@ startup. Benchmark/model data lives only in the file cache
    refresh`, filtered-to-nothing shows a distinct message.
 5. `sidebar.content` shows `◫ N models · GPQA #rank name score · panel
    open|closed · /mo`.
-6. Collapse state survives panel toggles; sorting, search, and filters survive
-   collapse; repeated toggles never fetch.
+6. When header-click collapse is enabled, collapse state survives panel toggles;
+   sorting, search, and filters always survive toggles and collapse; repeated
+   toggles never fetch.
+7. Header-click collapse is **opt-in** via `OPENCODE_MODEL_OVERVIEW_HEADER_COLLAPSE`
+   (`1|true|on|yes`, trimmed, case-insensitive; anything else or unset = disabled).
+   While disabled (default) the `▸`/`▾` indicator is hidden, the header click is a
+   no-op, and a stale persisted `collapsed: true` is normalized back to expanded on
+   load. `/model-overview toggle` opens/closes the whole panel and is unaffected.
 
 ## Manual verification (owner, after build/run)
 
 1. In this project directory, start or reload the TUI (`/reload` forces it).
-2. `/model-overview toggle` → panel appears; clicking the header collapses and
-   expands it; repeating the command closes it.
+2. `/model-overview toggle` → panel appears; with
+   `OPENCODE_MODEL_OVERVIEW_HEADER_COLLAPSE` exported (`=true`) the header click
+   collapses/expands it; without it the header click does nothing and no `▸/▾`
+   indicator is shown; repeating the command closes the panel.
 3. `/mo refresh` → refresh toast; footer freshness updates; no network on plain
    open.
 4. Click a column header → sort direction indicator flips; `/mo sort

@@ -27,9 +27,12 @@ import {
   f_nextRankingState,
   f_nextSortState,
   f_parseOverviewCommand,
+  f_resolveCollapsedState,
+  f_resolveHeaderCollapseEnabled,
   k_defaultFilters,
   k_defaultSearchState,
   k_defaultViewPreferences,
+  k_headerCollapseEnvVar,
   type OverviewViewPreferences,
 } from "../../src/ui/panel-controller";
 import { f_createTestBenchmark, f_createTestModel } from "./test-models";
@@ -376,6 +379,27 @@ describe("status text", () => {
     expect(f_buildSidebarSummary(null, 16, "livecodebench")).toBe(
       "16 models · no LCB data",
     );
+  });
+});
+
+describe("header collapse flag", () => {
+  test("env flag is opt-in with truthy values only", () => {
+    expect(k_headerCollapseEnvVar).toBe("OPENCODE_MODEL_OVERVIEW_HEADER_COLLAPSE");
+    expect(f_resolveHeaderCollapseEnabled({})).toBe(false);
+    expect(f_resolveHeaderCollapseEnabled({ [k_headerCollapseEnvVar]: "" })).toBe(false);
+    for (const vl_value of ["1", "true", "TRUE", " on ", "yes", "Yes"]) {
+      expect(f_resolveHeaderCollapseEnabled({ [k_headerCollapseEnvVar]: vl_value })).toBe(true);
+    }
+    for (const vl_value of ["0", "false", "off", "no", "enabled"]) {
+      expect(f_resolveHeaderCollapseEnabled({ [k_headerCollapseEnvVar]: vl_value })).toBe(false);
+    }
+  });
+
+  test("collapsed state stays false while the feature is disabled", () => {
+    expect(f_resolveCollapsedState(false, true)).toBe(false);
+    expect(f_resolveCollapsedState(false, false)).toBe(false);
+    expect(f_resolveCollapsedState(true, true)).toBe(true);
+    expect(f_resolveCollapsedState(true, false)).toBe(false);
   });
 });
 

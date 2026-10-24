@@ -89,6 +89,32 @@ export const k_defaultFilters: OverviewFilters = {
   missingLiveCodeBench: false,
 };
 
+/**
+ * Opt-in env flag for header-click collapse. The gesture stays implemented but
+ * is disabled by default so a stray click can never hide the table.
+ */
+export const k_headerCollapseEnvVar = "OPENCODE_MODEL_OVERVIEW_HEADER_COLLAPSE";
+
+/** Only an explicit truthy value enables header-click collapse. */
+export function f_resolveHeaderCollapseEnabled(
+  p_env: Readonly<Record<string, string | undefined>> = process.env,
+): boolean {
+  const vl_value = p_env[k_headerCollapseEnvVar];
+  if (vl_value === undefined) return false;
+  const vl_normalized = vl_value.trim().toLowerCase();
+  return (
+    vl_normalized === "1" ||
+    vl_normalized === "true" ||
+    vl_normalized === "on" ||
+    vl_normalized === "yes"
+  );
+}
+
+/** Effective collapsed state: the panel is never collapsed unless enabled. */
+export function f_resolveCollapsedState(p_enabled: boolean, p_stored: boolean): boolean {
+  return p_enabled && p_stored;
+}
+
 export interface OverviewDerivedRows {
   rows: readonly ModelRecord[];
   totalCount: number;
@@ -334,6 +360,8 @@ export interface OverviewController {
   readonly lastError: Accessor<string | null>;
   readonly rows: Accessor<OverviewDerivedRows>;
   readonly rankingLeader: Accessor<ModelRecord | null>;
+  /** Whether header-click collapse is enabled (env-gated, default off). */
+  readonly headerCollapseEnabled: boolean;
   readonly setSearchText: (p_text: string) => void;
   readonly toggleFreeOnly: () => void;
   readonly toggleMissingGpqa: () => void;
@@ -349,6 +377,7 @@ export interface OverviewController {
 /** Build the controller bound to a host `Plugin.Context`. */
 export function f_createOverviewController(p_context: Plugin.Context): OverviewController {
   const vl_cache = f_createFileCache(f_getDefaultCacheDirectory());
+  const vl_headerCollapseEnabled = f_resolveHeaderCollapseEnabled();
   const [vl_preferences, vl_setPreferences] = p_context.storage.store<OverviewViewPreferences>(
     k_preferencesStorageKey,
     { initial: { ...k_defaultViewPreferences } },
@@ -371,7 +400,8 @@ export function f_createOverviewController(p_context: Plugin.Context): OverviewC
     !f_isModelSortKey(vl_storedSortKey) ||
     !f_isSortDirection(vl_storedSortDirection) ||
     !f_isRankingMode(vl_storedRanking) ||
-    typeof vl_storedCollapsed !== "boolean"
+    typeof vl_storedCollapsed !== "boolean" ||
+    (!vl_headerCollapseEnabled && vl_storedCollapsed === true)
   ) {
     void vl_setPreferences((draft) => {
       draft.sortKey = f_isModelSortKey(vl_storedSortKey) ? vl_storedSortKey : k_defaultSortKey;
@@ -379,7 +409,10 @@ export function f_createOverviewController(p_context: Plugin.Context): OverviewC
         ? vl_storedSortDirection
         : k_defaultSortDirection;
       draft.ranking = f_isRankingMode(vl_storedRanking) ? vl_storedRanking : k_defaultRankingMode;
-      draft.collapsed = typeof vl_storedCollapsed === "boolean" ? vl_storedCollapsed : false;
+      draft.collapsed = f_resolveCollapsedState(
+        vl_headerCollapseEnabled,
+        typeof vl_storedCollapsed === "boolean" ? vl_storedCollapsed : false,
+      );
     });
   }
 
@@ -449,6 +482,7 @@ export function f_createOverviewController(p_context: Plugin.Context): OverviewC
   }
 
   function f_toggleCollapsed(): void {
+    if (!vl_headerCollapseEnabled) return;
     void vl_setPreferences((draft) => {
       draft.collapsed = !draft.collapsed;
     });
@@ -541,6 +575,7 @@ export function f_createOverviewController(p_context: Plugin.Context): OverviewC
     lastError: vl_lastError,
     rows: vl_rows,
     rankingLeader: vl_rankingLeader,
+    headerCollapseEnabled: vl_headerCollapseEnabled,
     setSearchText: f_setSearchText,
     toggleFreeOnly: f_toggleFreeOnly,
     toggleMissingGpqa: f_toggleMissingGpqa,
