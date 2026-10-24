@@ -212,12 +212,19 @@ set from local models), pricing (from registry cost; only external if verified),
 - Docs: `docs/api/{opencode-models,opencode-pricing,huggingface-gpqa,livecodebench}.md` updated with adapter
   behavior/verification; new `docs/architecture/data-flow.md`.
 
-### Phase 4 — Matching & ranking
+### Phase 4 — Matching & ranking — **DONE (2026-10-24)**
 `model-matching.ts`: exact provider/model ID → canonical ID → reviewed alias registry → conservative normalized match;
 ambiguous ⇒ **unmatched** (never borrow another model's score). `ranking.ts` (§8 of spec): pure comparator —
 non-mutating, missing last in both directions, deterministic tie-break by ID, natural case-insensitive names,
 numeric prices, rank-vs-score distinct; default `gpqaRank asc`. Search + provider/missing-data/free filters.
-- **Gate:** all rows sort deterministically; no fabricated values anywhere.
+- **Gate:** all rows sort deterministically; no fabricated values anywhere. ✅
+- **Implemented:** `src/services/model-matching.ts` (five-step resolution, alias injection, ambiguity/duplicate
+  reporting), `src/services/ranking.ts` (`f_compareModels`, `f_sortModels`, competition `f_assignBenchmarkRanks`),
+  `src/services/model-filter.ts` (search/provider/benchmark-presence/free), `src/config/model-aliases.ts`
+  (reviewed registry, intentionally empty until a mapping is verified).
+- **Results:** 39 new tests → **92 tests / 266 assertions**; `bun run check` green. No fabricated scores/ranks:
+  missing values stay `null`, ranks are only derived from non-null scores, and existing benchmark rows are not
+  overwritten. Docs updated in `docs/architecture/data-flow.md`.
 
 ### Phase 5 — Aggregation & caching
 `model-overview.ts`: `f_getModelOverview / f_refreshModelOverview / f_mergeModelSources / f_matchBenchmarkRecords /

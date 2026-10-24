@@ -1,7 +1,7 @@
 # Data Flow
 
-**Status:** Phase 3 complete (2026-10-24). Later phases add matching, ranking,
-aggregation, caching, and UI on top of these boundaries.
+**Status:** Phase 4 complete (2026-10-24). Later phases add aggregation, caching,
+and UI on top of these boundaries.
 
 ## Pipeline
 
@@ -38,6 +38,39 @@ usable.
 - Benchmark scores always carry their protocol: GPQA variant, or LiveCodeBench
   window + sample count.
 
+## Matching (`src/services/model-matching.ts`)
+
+Benchmark rows are matched independently, in this order: exact
+`<providerId>/<modelId>` key, exact `modelId`, exact `canonicalId`, reviewed
+alias, then conservative normalization (trim, lowercase, `_` → `-` only).
+Provider prefixes, version suffixes, and punctuation are not stripped
+automatically.
+
+- A strategy that resolves to more than one model is recorded as `ambiguous`;
+  matching stops there and never falls through to a looser strategy.
+- A reviewed alias whose target is absent, a row without a source ID, and a
+  duplicate benchmark for a model are all recorded as unmatched.
+- Existing benchmark rows are never overwritten.
+- `src/config/model-aliases.ts` is the reviewed registry. It is intentionally
+  empty for the 2026-10-24 catalog because no benchmark row corresponds to a
+  current registry model; the service accepts an injected registry for tests
+  and future reviewed mappings.
+
+## Ranking and filtering
+
+`src/services/ranking.ts` is pure: it never fetches, mutates, or depends on the
+TUI. Missing values (including absent benchmarks, prices, ranks, and dates)
+stay last in both directions; ties break by model ID for deterministic output.
+Names use a fixed `en` collator with numeric handling. `f_assignBenchmarkRanks`
+derives competition ranks from scores (ties share a rank, e.g. 1, 1, 3); a
+null score keeps `rank: null`, and source-supplied ranks are recomputed because
+GPQA's published rank mixes subsets.
+
+`src/services/model-filter.ts` composes case-insensitive search (name,
+provider, IDs), exact provider IDs, benchmark presence/absence (one benchmark
+or any), and explicit-free pricing. Filters are AND-combined and never mutate
+the catalog.
+
 ## Failure isolation
 
 Each source has an independent adapter result. A GPQA or LiveCodeBench failure
@@ -47,7 +80,7 @@ includes query strings, headers, or credentials in errors.
 
 ## Next phases
 
-- **Phase 4:** `src/services/model-matching.ts` and `ranking.ts` consume the
-  separate `ModelRecord[]` + `ModelBenchmark[]` outputs.
+- **Phase 4 (done):** matching, deterministic sorting/ranks, and filters are
+  implemented in `src/services/`.
 - **Phase 5:** aggregation and per-source cache wrap the adapters; live fetches
   remain explicit/background, never on panel open or keystroke.
