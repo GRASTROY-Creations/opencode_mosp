@@ -1,0 +1,246 @@
+# Implementation Plan: opencode_model_overview
+
+**Owner:** GRASTROY Creations · **Version:** 0.1.0 · **License:** MIT
+**Target runtime:** OpenCode v2.1.4 (verified installed) · Bun 1.4.2 · TypeScript · direnv
+**Scope constraint:** all work stays inside this project directory (`/mnt/PROJ/DEV/opencode_model_overview`).
+
+This plan consolidates the three knowledge documents, corrects them against the **verified** OpenCode v2
+plugin API, and defines the phased execution order with completion gates.
+
+---
+
+## 1. Source-of-truth hierarchy for `docs/`
+
+| File | Verdict |
+|---|---|
+| `KNOWLEDGE_03.md` | **Authoritative master spec.** Verification-first methodology, modular repo structure, domain contracts, phases, acceptance checklist. |
+| `KNOWLEDGE_02.md` | **Structural reference only.** Naming conventions and module breakdown are useful; its API details are wrong/unverified (see §3). |
+| `KNOWLEDGE_01.md` | **Discarded.** Obsolete draft (browser/React + `axios`/`react-table`), references a nonexistent `@opencode/plugin-api`, and is truncated mid-code-block at line 153. Do not implement from it. |
+
+---
+
+## 2. Verified environment (read-only checks, 2026-10-24)
+
+- `bun 1.4.2` · `direnv 2.37.1` · `git 2.55.0` · `node v24.18.0` · **`opencode v2.1.4`** (target version).
+- npm registry: **`@opencode/plugin` latest = `2.1.4`** (matches installed OpenCode); `@opentui/core` latest = `0.6.8`.
+- Reference repo `bnc4vk/opencode-model-scorecard` **exists** (GitHub API 200) → inspect in Phase 1.
+- Git state: one commit (`b77c5e3 Initial commit`); the three knowledge docs are currently **staged, uncommitted**.
+- Existing files: `LICENSE` (MIT, © 2026 GRASTROY Creations) and `.gitignore` present. `.gitignore` must still gain `.direnv/`, `.envrc.local`, `.cache/`, and the `!.env.example` exception (KNOWLEDGE_03 §16).
+
+---
+
+## 3. Corrections to the knowledge docs (verified against opencode.ai/v2 docs)
+
+KNOWLEDGE_02's core instincts are right but the identifiers are wrong. Use these verified facts instead:
+
+1. **Package name:** `@opencode/plugin` (NOT `@opencode-ai/plugin`). TUI/CLI plugins import from the
+   subpath **`@opencode/plugin/tui`** — OpenCode resolves it at runtime; no absolute path needed.
+2. **Entry shape:** `export default Plugin.define({ id, setup(ctx) { ... } })` — confirmed correct.
+   `setup` may return a cleanup function.
+3. **Native sidebar: SUPPORTED.** Documented slot mechanism (CLI plugins):
+   `context.ui.slot({ append: | prepend: | before: | after: | replace: <slot>, render })`
+   with slots: `app`, `home.footer`, `home.footer.status`, `prompt.footer(.status/.file)`,
+   `session.composer.top`, **`sidebar.content`**, **`sidebar.footer`**, **`session.panel`**.
+4. **Session panels (preferred for a full table):** `context.ui.slot({ append: "session.panel", render })`
+   + `context.ui.panel.open(name, { presentation })` — host owns sizing/focus/fullscreen; contributions get
+   reactive `name`, `sessionID`, `width`, `presentation`, `focused` + `focus`/`close`/`toggleFullscreen`.
+5. **Commands:** `context.keymap.layer(() => ({ mode, priority, commands: [{ id, title, group, bind,
+   palette, slash: { name, aliases, arguments }, run }], bindings }))` → gives palette, slash (`/model-overview …`)
+   and keybind actions in one registration → satisfies the "menu or command toggle" requirement.
+6. **Model & pricing discovery:** server plugins use `ctx.model.list()` / `ctx.provider.list()`;
+   CLI plugins use `context.data.location.model.list(location)` (+ `provider`, `integration`, … sync/invalidate).
+   `Model.Info` includes **`cost` tiers** (`tier.input`, `tier.output` referenced in official examples) and
+   `limit.context`. → Pricing is likely obtained from the registry itself; **no invented authenticated pricing
+   endpoint**. Exact field units (per-token vs per-1M) must be confirmed in Phase 1.
+7. **Persistence:** CLI `context.storage.store(key, { initial })` (durable JSON, reactive, syncs across TUI
+   instances) for UI preferences; server `ctx.storage.get/set/scan` for plugin-scoped data; a user cache dir
+   for benchmark snapshots.
+8. **UI stack:** SolidJS + OpenTUI (`@opentui/solid`, `@opentui/core`). Peer deps per docs:
+   `@opentui/core >=0.6.6`, `@opentui/solid >=0.6.6`, `solid-js >=1.9.0`. Use `context.theme` tokens and
+   `context.renderer.nativeScene` as owner for OpenTUI resources (OpenTUI ≥0.6 requirement).
+   `usePlugin()` gives context inside rendered JSX.
+9. **Package form:** publishable plugin exports — `"." : "./src/index.ts"`, `"./tui": "./src/tui.tsx"`;
+   project-local dev copy loads automatically from `.opencode/plugins/`.
+10. **Unverified external endpoints in KNOWLEDGE_02** (`huggingface.co/api/spaces/open-llm-leaderboard/...`,
+    `livecodebench.github.io/leaderboard.json`) must NOT be used as-is. Replace with sources verified in Phase 1
+    (HF documented form: `GET https://huggingface.co/api/datasets/{dataset_id}/leaderboard`).
+
+**Consequence:** KNOWLEDGE_03's top risk ("no native sidebar → need command/dashboard fallback") is resolved —
+**build the native panel directly**; the PoC in Phase 1 still gates it.
+
+---
+
+## 4. Product summary (from KNOWLEDGE_03 §1, §3)
+
+OpenCode plugin presenting a **collapsible model overview panel** with a searchable, sortable table of models
+available to the current installation, merging:
+- **availability + metadata** (OpenCode model registry: provider, model ID, name, context limit, release date where present);
+- **pricing** normalized to **USD per 1M input/output tokens** (from the registry's cost data, verified);
+- **benchmarks**: **GPQA (primary ranking)** and **LiveCodeBench (alternative ranking)** as external adapters with
+  provenance (source URL, evaluation/retrieval timestamps), score ≠ rank, missing = `N/A` — never fabricated.
+
+Interactions: click-collapse + command toggle (state survives collapse), ranking selector, asc/desc column sorts,
+search by name/provider/ID, optional filters, refresh with loading/empty/stale/partial/error states, source
+freshness display, deterministic stable sorting (missing values last in both directions).
+
+---
+
+## 5. Repository structure (KNOWLEDGE_03 §4, adapted to verified API)
+
+```
+opencode_model_overview/
+├── .envrc / .env.example / .editorconfig / .npmrc / bunfig.toml
+├── .github/workflows/ci.yml
+├── docs/                      # knowledge docs + everything below
+│   ├── architecture/{overview,data-flow,ui-integration,caching,decisions}.md
+│   ├── api/{opencode-models,opencode-pricing,huggingface-gpqa,livecodebench}.md
+│   └── {development,naming-conventions,testing,release}.md
+├── scripts/{refresh-benchmarks.ts,validate-data.ts}
+├── src/
+│   ├── index.ts               # server plugin (Plugin.define, id "opencode_model_overview")
+│   ├── tui.tsx                # CLI plugin: slots, panel, commands, table renderer
+│   ├── config/config.ts
+│   ├── domain/{model,benchmark,pricing}.ts
+│   ├── providers/{opencode-models,opencode-pricing,huggingface-gpqa,livecodebench}.ts
+│   ├── services/{model-overview,model-matching,ranking,cache}.ts
+│   ├── ui/{panel-controller,table,state}.ts(x)
+│   └── utils/{fetch-json,logger,result}.ts
+├── tests/{unit,integration,fixtures}/
+├── package.json  tsconfig.json  eslint.config.js  README.md  CHANGELOG.md  LICENSE
+```
+
+Entry-point decision (KNOWLEDGE_03 §4): keep `src/` as source of truth; for local development, load via a thin
+`.opencode/plugins/opencode-model-overview.ts` that re-exports from `src/` (single implementation, no copies).
+Final form = publishable package with `"./tui"` export + `plugins` entry in `opencode.json(c)`.
+
+---
+
+## 6. Coding conventions (mandatory, KNOWLEDGE_03 §5.1)
+
+- `f_` exported/runtime functions · `fh_` helpers · `g_` globals (shared mutable only; prefer DI) · `k_` constants
+  · `p_` parameters (even in short callbacks) · `vl_` local variables · `v_` other runtime vars
+- Types/interfaces **PascalCase**; string unions descriptive (`"gpqa"`); files **kebab-case**.
+- Strict TypeScript (flags per §5.4 incl. `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`);
+  no `any`; `unknown` + validation at external-data boundaries; explicit return types on exports;
+  no global rule disables; no default exports except where the plugin loader requires them.
+- Missing data stays `null` (never `0`, never fake ranks). Preserve provenance + timestamps on every price/benchmark record.
+- TypeScript version policy (KNOWLEDGE_03 §5.2): at setup, check latest stable TS compatible with `@opencode/plugin@2.1.4`
+  + tooling (TS 7 if stable/compatible, else TS 6; else stop and document the blocker). Pin it; commit `bun.lock`.
+
+---
+
+## 7. Phased execution plan with gates (adapted from KNOWLEDGE_03 §18)
+
+### Phase 0 — Repo & tooling skeleton — **DONE (2026-10-24)**
+- `bun init`; add `@opencode/plugin@2.1.4` + `solid-js`, peers `@opentui/core`/`@opentui/solid`; dev TS/eslint/typescript-eslint/`@types/bun`.
+- Create `tsconfig.json`, flat `eslint.config.js` (no `any`, no-floating-promises, naming-prefix rule where practical),
+  `bunfig.toml`, `.editorconfig`, `.npmrc`; extend `.gitignore` (§2); write `.envrc` + `.env.example` (no secrets; §5.5).
+- **Gate:** `bun install`, `bun run typecheck`, `bun run lint` all pass on the empty skeleton. ✅ All green.
+- **Actuals:** TypeScript pinned to **6.0.3** per §5.2 policy (TS 7.0.2 stable, but `typescript-eslint@8.72.0`
+  requires `>=4.8.4 <6.1.0`); ESLint 10.13.0. Skeletons `src/index.ts` + `src/tui.tsx` are inert
+  `Plugin.define` stubs (default export = documented naming exception). `refresh:benchmarks` / `validate:data`
+  npm scripts deferred to Phase 3 (their script files don't exist yet). All deviations recorded in
+  `docs/development.md`. `direnv allow` intentionally left to the user.
+
+### Phase 1 — Feasibility PoC + source verification *(the hard gates)*
+1. Minimal TUI plugin: register `session.panel` contribution + compact `sidebar.content` status +
+   `/model-overview` (and `toggle`) slash commands; verify it **loads and toggles in opencode 2.1.4**.
+2. Dump/inspect real `Model.Info` schema: IDs, names, `limit.context`, `cost` tier fields + **units**.
+3. Verify data sources; record each in `docs/api/*.md` with URL, auth, rate limits, license, example response, verification date:
+   - HF `GET /api/datasets/{dataset_id}/leaderboard` — pick the dataset that actually contains GPQA; score direction; fixture.
+   - LiveCodeBench official source (API or snapshot-download script; **no invented endpoints**).
+   - Inspect `bnc4vk/opencode-model-scorecard`: pricing source, refresh scripts, `tui.tsx`, **license** (attribution if reused).
+- **Gate:** PoC panel renders + command toggles (documented in `docs/architecture/ui-integration.md`); every external
+  source is verified or explicitly flagged unavailable with a snapshot fallback designed.
+
+### Phase 2 — Domain contracts
+`src/domain/*`: `ModelRecord`, `ModelPricing` (USD/1M in/out, currency, source, observedAt), `ModelBenchmark`
+(score ≠ rank, sourceUrl, evaluatedAt), `ModelSource`, `RankingMode`, `SortDirection`, `ModelSortKey`.
+Validation for external data boundaries.
+- **Gate:** unit tests on types/normalization run without network.
+
+### Phase 3 — Data adapters
+`src/utils/fetch-json.ts` (timeout+AbortController, no secrets in errors) with retry/backoff + `Retry-After` at adapter level.
+Adapters: OpenCode models (+optional inference catalog `https://opencode.ai/inference/v1/models` treated as a *different*
+set from local models), pricing (from registry cost; only external if verified), GPQA, LiveCodeBench.
+- **Gate:** each adapter passes fixture-based tests; no ordinary tests hit live services.
+
+### Phase 4 — Matching & ranking
+`model-matching.ts`: exact provider/model ID → canonical ID → reviewed alias registry → conservative normalized match;
+ambiguous ⇒ **unmatched** (never borrow another model's score). `ranking.ts` (§8 of spec): pure comparator —
+non-mutating, missing last in both directions, deterministic tie-break by ID, natural case-insensitive names,
+numeric prices, rank-vs-score distinct; default `gpqaRank asc`. Search + provider/missing-data/free filters.
+- **Gate:** all rows sort deterministically; no fabricated values anywhere.
+
+### Phase 5 — Aggregation & caching
+`model-overview.ts`: `f_getModelOverview / f_refreshModelOverview / f_mergeModelSources / f_matchBenchmarkRecords /
+f_getOverviewStatus / f_sortModels / f_filterModels`. Independent per-source fetch + failure isolation (one source down ⇒
+partial table, stale label; never whole-service crash). Cache: per-source keys, TTLs (models/pricing 1h, benchmarks 6h —
+tunable), schema version, atomic writes in a user cache dir, in-flight dedup, last-known-good preservation.
+- **Gate:** service returns usable partial results when any single optional source fails.
+
+### Phase 6 — UI (SolidJS + OpenTUI)
+- `session.panel` table: sticky header, scroll, all sortable columns with active-column/direction indicator,
+  ranking selector (GPQA ↔ LiveCodeBench), search field, provider/missing/free filters, refresh action,
+  last-refresh + per-source freshness/stale/error status, empty state, `N/A`/`—` for missing.
+- `sidebar.content`: compact summary (e.g., selected/active model rank + price, "open panel" hint).
+- Collapse/expand: mouse click on header toggle **and** `/model-overview toggle`; repeated toggles refetch nothing;
+  sort/search/ranking state survive collapse; prefs persist via `context.storage.store`.
+- Commands via `keymap.layer`: `/model-overview [refresh|sort gpqa|sort input-price|sort output-price|ranking livecodebench|toggle|status]`, palette entry, keybind.
+- UI kept behind adapter (`panel-controller` decoupled from renderer) so data layer is reusable.
+- **Gate:** table usable with complete *and* incomplete source data; both toggle mechanisms work in 2.1.4.
+
+### Phase 7 — Testing, security, CI
+Unit suite (normalization, aliases, price units incl. no double-scaling, score→rank, sort directions/ties/missing,
+filters, TTL, malformed/timeout/HTTP errors) + integration scenarios with mocked HTTP & committed fixtures (§14.2 list)
++ UI smoke checks (§14.3). Security: no secrets in logs/code/fixtures; HF token never sent to other origins; env validated
+at actual plugin runtime (direnv ≠ GUI-process env). GitHub Actions: `bun install --frozen-lockfile && typecheck && lint && test`
+(CI never autofixes).
+- **Gate:** full pipeline green; feasibility PoC still valid on the targeted release.
+
+### Phase 8 — Docs & release prep
+Complete every `docs/` file (§15 of spec; API docs distinguish verified vs assumed with dates), README (purpose,
+install, supported OpenCode versions, configuration, data sources + methodology, pricing units, limitations,
+security policy, license, dev instructions), CHANGELOG, v0.1.0 + MIT + GRASTROY Creations metadata,
+final diff review + report of commands for the owner.
+- **Gate:** ready for owner review; **zero commits/pushes performed by the agent**.
+
+---
+
+## 8. Definition of done (v0.1.0 checklist — KNOWLEDGE_03 §19)
+
+1. Plugin loads in targeted OpenCode without runtime errors
+2. All models from the selected discovery mechanism represented
+3. Prices normalized to USD/1M in/out from verified source
+4. GPQA carries variant + source + evaluation metadata where available
+5. LiveCodeBench selectable independently of GPQA
+6. No fabricated scores/prices for missing data
+7. Every requested column sortable both directions
+8. Sorting deterministic; missing values last
+9. Search/filters operate on normalized records
+10. Collapse/expand via verified native mechanism
+11. Menu/command toggle exists
+12. Source failures isolated; stale-data status shown
+13. Unit + integration tests, lint, typecheck pass
+14. Architecture & data-source docs current under `docs/`
+15. Complex paths commented
+16. No secrets/caches/generated files in Git
+17. Version/owner/license metadata correct
+18. Agent performed **no** commit/push/publish
+
+---
+
+## 9. Git & ownership rules
+
+- The **owner** performs `git commit` / `git push` / publishing. Agents prepare changes, run checks, show staged diffs,
+  and report suggested commands only.
+- Before any commit: verify nothing staged contains API keys, `.direnv/`, caches, or personal paths.
+
+## 10. Open decisions (confirm with owner during implementation)
+
+1. **UI emphasis** — recommended: `session.panel` primary table + compact `sidebar.content` summary + slash commands
+   (vs. sidebar-only). Current plan assumes the recommended option.
+2. **Pricing source** — registry `Model.Info.cost` first (verify units); external catalog only if Phase 1 finds the
+   registry insufficient. Treat `inference/v1/models` as availability info, not a pricing guarantee.
+3. **GPQA dataset ID + LiveCodeBench source** — must be pinned by Phase 1 evidence, not guessed.
+4. **Local dev loading** — thin `.opencode/plugins/` entry re-exporting `src/` (recommended) vs. build-copy step.

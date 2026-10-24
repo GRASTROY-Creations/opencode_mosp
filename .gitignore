@@ -111,3 +111,19 @@ dist
 
 # TernJS port file
 .tern-port
+
+# --- opencode_model_overview project-specific (docs/PLAN.md §2) ---
+# direnv state and local env overrides
+.direnv/
+.envrc.local
+
+# dotenv: .env.* above would re-match .env.example, keep the example tracked
+.env.*
+!.env.example
+
+# local cache / snapshot data (model + benchmark caches live in user cache dir)
+.cache/
+
+# OpenCode local state that may contain credentials
+auth.json
+.opencode/auth.json
