@@ -186,11 +186,31 @@ Validation for external data boundaries.
   in/out price is zero; a model with no benchmark has no array entry; score and rank are independent.
 - **Tests:** `tests/unit/domain.test.ts` — 23 tests / 95 assertions, network-free.
 
-### Phase 3 — Data adapters
+### Phase 3 — Data adapters — **DONE (2026-10-24)**
 `src/utils/fetch-json.ts` (timeout+AbortController, no secrets in errors) with retry/backoff + `Retry-After` at adapter level.
 Adapters: OpenCode models (+optional inference catalog `https://opencode.ai/inference/v1/models` treated as a *different*
 set from local models), pricing (from registry cost; only external if verified), GPQA, LiveCodeBench.
-- **Gate:** each adapter passes fixture-based tests; no ordinary tests hit live services.
+- **Gate:** each adapter passes fixture-based tests; no ordinary tests hit live services. ✅ 30 adapter tests; `bun run check` = 53 tests / 203 assertions.
+
+**Implemented**
+- `src/utils/fetch-json.ts` — typed `FetchJsonError` (HTTP/network/timeout/abort/parse/invalid-url/options),
+  host-only messages, composed timeout+cancellation signal, retries only transient failures
+  (408/425/429/5xx/network/timeout), `Retry-After` respected and capped, injectable fetch/sleep.
+- `src/providers/adapter-result.ts` — `AdapterResult<T>` + row-level warnings for partial payloads.
+- `src/providers/opencode-pricing.ts` — registry cost (already USD/1M) → base + sorted context tiers;
+  missing cost = unavailable (`null`), zero stays free; duplicate bases/tier sizes rejected.
+- `src/providers/opencode-models.ts` — accepts `ModelInfo[]` or `{data:[…]}`; filters disabled by default;
+  skips invalid rows with warnings; never reads secret-bearing fields; provider-name fallback = provider ID.
+- `src/providers/huggingface-gpqa.ts` — exact `.eval_results/gpqa_diamond.yaml` filter, higher-is-better
+  enforcement, HF rank discarded, duplicate model rows left unmatched, fetch wrapper.
+- `src/providers/livecodebench.ts` — verified default window (`date_marks[15]` when >12, else `[4]`, end = last),
+  mean `pass@1`, minimum-sample guard 100, duplicate/unknown models excluded, window+count attached.
+- **Live probes (read-only, 2026-10-24):** GPQA 25 Diamond rows / 0 warnings; LCB 28 models / 0 warnings,
+  `DeepSeek-V3` = 27.2026 over 454 samples (default 2024-08-01 → 2025-05-01), reproduced from raw data.
+- Optional inference catalog (`inference/v1/models`) remains **not implemented**: schema/auth unverified,
+  and it is not a pricing guarantee. Registry is the pricing source.
+- Docs: `docs/api/{opencode-models,opencode-pricing,huggingface-gpqa,livecodebench}.md` updated with adapter
+  behavior/verification; new `docs/architecture/data-flow.md`.
 
 ### Phase 4 — Matching & ranking
 `model-matching.ts`: exact provider/model ID → canonical ID → reviewed alias registry → conservative normalized match;

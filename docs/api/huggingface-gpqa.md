@@ -67,6 +67,26 @@ type GpqaLeaderboardEntry = {
 - Rate limits are not published; keep requests sparse and never retry in a
   tight loop. Use the shared `fh_` fetch helper with timeout + backoff.
 
+## Adapter (implemented, Phase 3)
+
+`src/providers/huggingface-gpqa.ts`:
+
+- `f_buildHuggingFaceLeaderboardUrl(datasetId)` — percent-encodes each dataset
+  path segment.
+- `f_parseGpqaLeaderboard(payload)` — keeps exactly
+  `.eval_results/gpqa_diamond.yaml`; requires `lower_is_better === false`;
+  validates `modelId` and a 0–100 `value`.
+- `f_fetchGpqaBenchmarks(options)` — shared fetch helper plus parser; fetch
+  failures come back as `AdapterResult` errors for per-source isolation.
+- Output: `benchmarkId: "gpqa"`, `variant: "gpqa_diamond"`, `rank: null`
+  (HF's mixed-subset rank is never reused), `sampleCount: null` (the payload
+  has no reliable sample count), and `source.url` when it is a valid HTTP(S)
+  URL, otherwise the leaderboard page.
+- Duplicate Diamond rows for one `modelId` are treated as ambiguous: the model
+  is left unmatched with a warning. Rows from other subsets are ignored.
+- **Live probe (2026-10-24):** 25 normalized rows, 0 warnings — exactly the
+  observed Diamond subset size.
+
 ## Open questions
 
 - Is `value` always normalized to accuracy percentage, including `with_tools`

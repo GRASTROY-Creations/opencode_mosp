@@ -59,6 +59,25 @@ Notes:
 - Free models report `input: 0` / `output: 0`; that is a real price, not
   missing data. Distinguish "free" (0) from "unknown" (null) in domain code.
 
+## Adapter (implemented, Phase 3)
+
+`src/providers/opencode-models.ts` + `opencode-pricing.ts`:
+
+- `f_parseOpencodeModels(payload, { observedAt, providerNames?, includeDisabled? })`
+  accepts a raw `ModelInfo[]` or the HTTP `{ data: [...] }` envelope.
+- Reads only `id`/`modelID`/`providerID`/`canonical`/`name`/`time.released`/
+  `limit.context`/`cost`. It never reads, stores, or logs `settings`, `headers`,
+  `body`, or variant credentials.
+- Disabled rows are skipped unless `includeDisabled` is true. Invalid rows are
+  skipped with warnings; a payload with no valid rows fails instead of
+  producing an empty catalog.
+- `providerName` comes from the optional provider-name map; if absent, the
+  provider ID is used as the factual fallback (never an invented label).
+- Slash-free provider/model halves are required by the `<providerId>/<modelId>`
+  domain key.
+- Pricing comes from `cost`; base + context tiers are preserved (see
+  `opencode-pricing.md`).
+
 ## Stability
 
 The OpenAPI document is the machine-readable contract. `ModelInfo` is a

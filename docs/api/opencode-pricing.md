@@ -1,7 +1,9 @@
 # API — OpenCode pricing
 
 **Status: VERIFIED (units, shape, tiers)** (2026-10-24). The *tier selection
-semantics* are **ASSUMED** and must be confirmed in Phase 3.
+semantics* remain **ASSUMED**: the public schema does not define whether
+`size` counts prompt or total context, and 0.1.0 performs no billable requests
+to test it. The adapter preserves tiers without blending them.
 
 ## Source
 
@@ -44,6 +46,22 @@ corroborating the unit.
   indicate additional tiers (`+N tiers`) rather than blending them.
 - Whether the threshold means *prompt tokens* or *total context* is not
   documented; Phase 3 must test one tiered model and record the result here.
+
+## Adapter (implemented, Phase 3)
+
+`src/providers/opencode-pricing.ts` (`f_parseOpencodePricing`):
+
+- No unit scaling: registry values are already USD per 1M tokens.
+- The entry without `tier` becomes the base price; context-tier entries are
+  validated (`type: "context"`, positive integer `size`), deduplicated by
+  threshold, and sorted ascending.
+- Negative or non-numeric amounts fail the row; multiple base entries or
+  duplicate tier sizes are rejected.
+- Missing/empty `cost` produces explicit unavailable pricing (`null` amounts);
+  genuine `0` values stay zero.
+- `source` is `opencode:model-registry`; `observedAt` is catalog read time.
+- Tier **selection** at request time is not implemented or claimed; the UI
+  shows the base price and a tier count.
 
 ## Rules
 
