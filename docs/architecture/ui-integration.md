@@ -155,8 +155,20 @@ startup. Benchmark/model data lives only in the file cache
 - The `@opentui/solid` reconciler assigns unknown props with `node[name] =
   value`; `Renderable` defines setters for `onMouse`, `onMouseDown`,
   `onMouseUp`, `onMouseDrag`, `onMouseOver`, `onMouseOut`, `onMouseScroll`.
-  So `onMouse={handler}` on `box`/`text` is the supported click binding
-  (verified in the reconciler source).
+- **Pitfall (verified in `@opentui/core` 0.6.8 source):** `onMouse` is a
+  catch-all listener that fires for *every* mouse event type, including hover
+  moves — never bind activation to it. Activation uses `onMouseDown` (record the
+  pressed target) plus `onMouseUp` (run the action only when the pressed target
+  matches). The host dispatches `up` to the element under the cursor at release
+  time, so the pressed-target guard prevents "press A, release over B" from
+  firing B; the panel root also clears the pressed target on `up` as a safety
+  net. Hover indicators use `onMouseOver`/`onMouseOut` only.
+- **Press registry lives at module scope** (`g_pressedTarget` / `g_hoveredChip`,
+  not component-local signals): the host can re-render or re-create a slot
+  component between `down` and `up` (for example after the auto-focus that
+  follows a press), and component-local bookkeeping is reset by that, silently
+  cancelling every click. Module scope also keeps the hover marker stable across
+  re-renders. `onMouse` remains unused for activation.
 - `input` maps `onInput`/`onChange`/`onSubmit` (value string) and the special
   `focused` prop; `scrollbox` supports `focused`, `stickyScroll`, `stickyStart`.
 - Tokens used: `theme.text.base | muted | faint`, `theme.border.base`,
@@ -169,10 +181,15 @@ startup. Benchmark/model data lives only in the file cache
 1. `session.panel` renders a bordered, titled table with a header row that is
    clickable only when header-click collapse is enabled (see item 7), ranking
    chips (`GPQA` / `LiveCodeBench`), a `[refresh]` chip, a search `<input>`, and
-   filter chips (`free`, `missing GPQA`, `missing LCB`).
+   filter chips (`free`, `missing GPQA`, `missing LCB`). Every selectable chip
+   renders through `f_formatChipLabel(selected, hovered, label)`: `[>>GPQA]` when
+   selected, `[>GPQA]` when merely hovered, plain `[GPQA]` otherwise; selection
+   wins over hover (`[>>GPQA]` while hovered and active). Hover is transient
+   (memory only) via `onMouseOver`/`onMouseOut`.
 2. Columns: Model, Provider, Ctx, In $/M, Out $/M, GPQA, LCB — each sortable
-   column header is clickable and shows `▲`/`▼` when active. Missing values
-   render as `—`; benchmark cells show `#rank score`.
+   column header is clickable and shows `▲`/`▼` when active. The price columns
+   are 10 cells wide so `Out $/M ▲` stays on one line (an 8-wide column wrapped
+   the arrow). Missing values render as `—`; benchmark cells show `#rank score`.
 3. Rows come from the controller's derived memo: search/provider/presence/free
    filters composed with AND, then the non-mutating comparator; missing values
    sort last in both directions.
@@ -189,6 +206,17 @@ startup. Benchmark/model data lives only in the file cache
    While disabled (default) the `▸`/`▾` indicator is hidden, the header click is a
    no-op, and a stale persisted `collapsed: true` is normalized back to expanded on
    load. `/model-overview toggle` opens/closes the whole panel and is unaffected.
+8. Activation is press-and-release on the same target. The search input takes
+   focus on its own `onMouseDown` (initial focus off; hover never grabs focus),
+   and every other target blurs it on `onMouseDown`. Chips, sort headers, the
+   collapse header, and refresh only fire when the release happens over the same
+   target that was pressed — hovering alone never activates anything. Enter and
+   collapse also blur search. Press bookkeeping is held in module-scope signals
+   (`g_pressedTarget`, `g_hoveredChip`) so a host re-render between `down` and
+   `up` cannot cancel the click. The `[refresh]` chip shows `[refreshing…]`
+   while a refresh is in flight, ignores presses during it, and routes through
+   the panel's `onRefresh` prop (the same `f_refreshWithToast` path as the slash
+   command), so completion and failure always toast.
 
 ## Manual verification (owner, after build/run)
 
@@ -197,16 +225,25 @@ startup. Benchmark/model data lives only in the file cache
    `OPENCODE_MODEL_OVERVIEW_HEADER_COLLAPSE` exported (`=true`) the header click
    collapses/expands it; without it the header click does nothing and no `▸/▾`
    indicator is shown; repeating the command closes the panel.
-3. `/mo refresh` → refresh toast; footer freshness updates; no network on plain
-   open.
+3. `/mo refresh` → refresh toast; footer freshness updates; the `[refresh]` chip
+   also toasts, shows `[refreshing…]` while loading, and ignores presses during a
+   refresh; no network on plain open.
 4. Click a column header → sort direction indicator flips; `/mo sort
    input-price` matches the same state.
-5. Ranking chips switch GPQA ↔ LiveCodeBench; sidebar leader follows.
+5. Ranking chips switch GPQA ↔ LiveCodeBench: active shows `[>>…]`, hovering an
+   inactive chip shows `[>…]`, hovered+active stays `[>>…]`; sidebar leader
+   follows; the `Out $/M` sort arrow stays on the header line.
 6. Search input filters live; `free` / `missing GPQA` / `missing LCB` chips
-   compose.
-7. `/mo status` → dialog with the full status breakdown.
-8. Palette lists the `Model overview:` entries; slash `/mo` autocompletes.
-9. Stop a source (offline) → panel stays usable, footer shows `partial`/`stale`.
+   compose and show `[>>…]` when active, `[>…]` on hover.
+7. Search focuses only when clicked; typing before any click must not change the
+   filter; clicking elsewhere clears the focus. Hovering never activates any
+   control: activation requires press-and-release on the same target, and
+   releasing over a different target does nothing. Press bookkeeping is
+   module-scope, so clicks must keep working even if the host re-renders the
+   panel between press and release.
+8. `/mo status` → dialog with the full status breakdown.
+9. Palette lists the `Model overview:` entries; slash `/mo` autocompletes.
+10. Stop a source (offline) → panel stays usable, footer shows `partial`/`stale`.
 
 If the plugin fails to load, the service log
 (`~/.local/share/opencode/log/opencode.log`) names the file and error.

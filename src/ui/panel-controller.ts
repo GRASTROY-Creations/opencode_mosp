@@ -268,6 +268,20 @@ export function f_getSortKeyLabel(p_key: ModelSortKey): string {
   }
 }
 
+/**
+ * Chip label: `[>>label]` when selected, `[>label]` when hovered by the
+ * cursor, plain `[label]` otherwise. Selection wins over hover.
+ */
+export function f_formatChipLabel(
+  p_selected: boolean,
+  p_hovered: boolean,
+  p_label: string,
+): string {
+  if (p_selected) return `[>>${p_label}]`;
+  if (p_hovered) return `[>${p_label}]`;
+  return `[${p_label}]`;
+}
+
 function fh_shortSource(p_source: string): string {
   if (p_source === "opencode-models") return "models";
   if (p_source === "opencode-pricing") return "pricing";

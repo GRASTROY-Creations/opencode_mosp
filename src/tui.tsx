@@ -17,6 +17,7 @@ import {
   f_buildStatusLines,
   f_createOverviewController,
   f_describeSnapshot,
+  f_formatChipLabel,
   f_getSortKeyLabel,
   f_parseOverviewCommand,
   k_overviewUsage,
@@ -35,6 +36,14 @@ import {
  */
 
 const k_panelName = "model-overview";
+
+// Interaction state is shared at module scope on purpose: the host may
+// re-render (or re-create) the slot component between a mouse `down` and its
+// `up`. Component-local signals would be reset inside that window and the
+// pressed-target guard would cancel every click (all controls went dead).
+// See docs/architecture/ui-integration.md ("Mouse and rendering").
+const [g_pressedTarget, g_setPressedTarget] = createSignal<string | null>(null);
+const [g_hoveredChip, g_setHoveredChip] = createSignal<string | null>(null);
 
 /** The subset of the host's panel input this panel renders from. */
 interface PanelView {
@@ -58,8 +67,8 @@ const k_columns: readonly OverviewColumn[] = [
   { key: "name", label: "Model", width: 24 },
   { key: "providerName", label: "Provider", width: 14 },
   { key: null, label: "Ctx", width: 6 },
-  { key: "inputPrice", label: "In $/M", width: 8 },
-  { key: "outputPrice", label: "Out $/M", width: 8 },
+  { key: "inputPrice", label: "In $/M", width: 10 },
+  { key: "outputPrice", label: "Out $/M", width: 10 },
   { key: "gpqaRank", label: "GPQA", width: 11 },
   { key: "livecodebenchRank", label: "LCB", width: 11 },
 ];
@@ -73,12 +82,12 @@ function f_formatBenchmarkCell(p_benchmark: ModelBenchmark | null): string {
   return vl_parts.length > 0 ? vl_parts.join(" ") : "—";
 }
 
-function OverviewRow(props: { readonly model: ModelRecord }) {
+function OverviewRow(props: { readonly model: ModelRecord; readonly onMouseDown: () => void }) {
   const context = usePlugin();
   const vl_gpqa = f_getBenchmarkForModel(props.model, "gpqa");
   const vl_liveCodeBench = f_getBenchmarkForModel(props.model, "livecodebench");
   return (
-    <box flexDirection="row" gap={1} paddingLeft={1}>
+    <box flexDirection="row" gap={1} paddingLeft={1} onMouseDown={props.onMouseDown}>
       <box width={24}>
         <text fg={context.theme.text.base}>{f_truncate(props.model.name, 23)}</text>
       </box>
@@ -88,12 +97,12 @@ function OverviewRow(props: { readonly model: ModelRecord }) {
       <box width={6}>
         <text fg={context.theme.text.muted}>{f_formatContext(props.model.contextWindow)}</text>
       </box>
-      <box width={8}>
+      <box width={10}>
         <text fg={context.theme.text.base}>
           {f_formatPrice(props.model.pricing.inputUsdPerMillionTokens)}
         </text>
       </box>
-      <box width={8}>
+      <box width={10}>
         <text fg={context.theme.text.base}>
           {f_formatPrice(props.model.pricing.outputUsdPerMillionTokens)}
         </text>
@@ -111,6 +120,8 @@ function OverviewRow(props: { readonly model: ModelRecord }) {
 function ModelOverviewPanel(props: {
   readonly input: PanelView;
   readonly controller: OverviewController;
+  /** Chip-initiated refresh: routed through the toast path in f_setup. */
+  readonly onRefresh: () => void;
 }) {
   const context = usePlugin();
   const [vl_searchFocused, vl_setSearchFocused] = createSignal(false);
@@ -119,6 +130,33 @@ function ModelOverviewPanel(props: {
   const vl_modelCount = () => props.controller.snapshot()?.models.length ?? 0;
   const fh_chipColor = (p_active: boolean) =>
     p_active ? context.theme.text.base : context.theme.text.faint;
+  // Search takes focus only from its own click; every other click clears it.
+  const fh_blurSearch = (): void => {
+    vl_setSearchFocused(false);
+  };
+  // Hover is transient cursor focus. The guarded clear keeps a fast hand-off
+  // from one chip to the next safe (out may fire after the next over).
+  const fh_setChipHover = (p_id: string, p_hovered: boolean): void => {
+    if (p_hovered) {
+      g_setHoveredChip(p_id);
+      return;
+    }
+    g_setHoveredChip((p_current) => (p_current === p_id ? null : p_current));
+  };
+  // Activation is press-and-release on the same target: the host dispatches
+  // mouse `up` to the element under the cursor at release time, so without the
+  // pressed-target guard a press on one chip and release over another would
+  // fire the other's action. `onMouse` is never used for activation because it
+  // fires for every mouse event type, including hover moves. The registry lives
+  // at module scope so a host re-render between down and up cannot cancel it.
+  const fh_beginPress = (p_id: string): void => {
+    fh_blurSearch();
+    g_setPressedTarget(p_id);
+  };
+  const fh_endPress = (p_id: string, p_action: () => void): void => {
+    if (g_pressedTarget() === p_id) p_action();
+    g_setPressedTarget(null);
+  };
 
   return (
     <Show when={props.input.name === k_panelName}>
@@ -136,8 +174,21 @@ function ModelOverviewPanel(props: {
             : "esc closes · /model-overview toggle"
         }
         bottomTitleAlignment="right"
+        onMouseUp={() => {
+          g_setPressedTarget(null);
+        }}
       >
-        <box flexDirection="row" gap={1} paddingLeft={1} onMouse={props.controller.toggleCollapsed}>
+        <box
+          flexDirection="row"
+          gap={1}
+          paddingLeft={1}
+          onMouseDown={() => {
+            fh_blurSearch();
+            g_setHoveredChip(null);
+            g_setPressedTarget("panel-header");
+          }}
+          onMouseUp={() => fh_endPress("panel-header", props.controller.toggleCollapsed)}
+        >
           <text fg={context.theme.text.base}>
             {props.controller.headerCollapseEnabled
               ? `${vl_collapsed() ? "▸" : "▾"} Model Overview`
@@ -149,20 +200,51 @@ function ModelOverviewPanel(props: {
         </box>
         <Show when={!vl_collapsed()}>
           <box flexDirection="row" gap={1} paddingLeft={1}>
-            <box onMouse={() => props.controller.setRanking("gpqa")}>
-              <text fg={fh_chipColor(props.controller.preferences.ranking === "gpqa")}>[GPQA]</text>
-            </box>
-            <box onMouse={() => props.controller.setRanking("livecodebench")}>
-              <text fg={fh_chipColor(props.controller.preferences.ranking === "livecodebench")}>
-                [LCB]
+            <box
+              onMouseOver={() => fh_setChipHover("gpqa", true)}
+              onMouseOut={() => fh_setChipHover("gpqa", false)}
+              onMouseDown={() => fh_beginPress("chip-gpqa")}
+              onMouseUp={() => fh_endPress("chip-gpqa", () => props.controller.setRanking("gpqa"))}
+            >
+              <text fg={fh_chipColor(props.controller.preferences.ranking === "gpqa")}>
+                {f_formatChipLabel(
+                  props.controller.preferences.ranking === "gpqa",
+                  g_hoveredChip() === "gpqa",
+                  "GPQA",
+                )}
               </text>
             </box>
             <box
-              onMouse={() => {
-                void props.controller.refresh(true);
-              }}
+              onMouseOver={() => fh_setChipHover("livecodebench", true)}
+              onMouseOut={() => fh_setChipHover("livecodebench", false)}
+              onMouseDown={() => fh_beginPress("chip-lcb")}
+              onMouseUp={() =>
+                fh_endPress("chip-lcb", () => props.controller.setRanking("livecodebench"))
+              }
             >
-              <text fg={context.theme.text.muted}>[refresh]</text>
+              <text fg={fh_chipColor(props.controller.preferences.ranking === "livecodebench")}>
+                {f_formatChipLabel(
+                  props.controller.preferences.ranking === "livecodebench",
+                  g_hoveredChip() === "livecodebench",
+                  "LCB",
+                )}
+              </text>
+            </box>
+            <box
+              onMouseOver={() => fh_setChipHover("refresh", true)}
+              onMouseOut={() => fh_setChipHover("refresh", false)}
+              onMouseDown={() => fh_beginPress("refresh")}
+              onMouseUp={() =>
+                fh_endPress("refresh", () => {
+                  if (!props.controller.loading()) props.onRefresh();
+                })
+              }
+            >
+              <text fg={context.theme.text.muted}>
+                {props.controller.loading()
+                  ? "[refreshing…]"
+                  : f_formatChipLabel(false, g_hoveredChip() === "refresh", "refresh")}
+              </text>
             </box>
             <input
               placeholder="search"
@@ -170,19 +252,57 @@ function ModelOverviewPanel(props: {
               focused={vl_searchFocused()}
               onInput={(p_value) => props.controller.setSearchText(p_value)}
               onSubmit={() => vl_setSearchFocused(false)}
-              onMouse={() => vl_setSearchFocused(true)}
+              onMouseDown={() => {
+                g_setPressedTarget(null);
+                vl_setSearchFocused(true);
+              }}
             />
           </box>
           <box flexDirection="row" gap={1} paddingLeft={1}>
-            <box onMouse={props.controller.toggleFreeOnly}>
-              <text fg={fh_chipColor(props.controller.filters.freeOnly)}>free</text>
+            <box
+              onMouseOver={() => fh_setChipHover("free", true)}
+              onMouseOut={() => fh_setChipHover("free", false)}
+              onMouseDown={() => fh_beginPress("chip-free")}
+              onMouseUp={() => fh_endPress("chip-free", props.controller.toggleFreeOnly)}
+            >
+              <text fg={fh_chipColor(props.controller.filters.freeOnly)}>
+                {f_formatChipLabel(
+                  props.controller.filters.freeOnly,
+                  g_hoveredChip() === "free",
+                  "free",
+                )}
+              </text>
             </box>
-            <box onMouse={props.controller.toggleMissingGpqa}>
-              <text fg={fh_chipColor(props.controller.filters.missingGpqa)}>missing GPQA</text>
+            <box
+              onMouseOver={() => fh_setChipHover("missing-gpqa", true)}
+              onMouseOut={() => fh_setChipHover("missing-gpqa", false)}
+              onMouseDown={() => fh_beginPress("chip-missing-gpqa")}
+              onMouseUp={() =>
+                fh_endPress("chip-missing-gpqa", props.controller.toggleMissingGpqa)
+              }
+            >
+              <text fg={fh_chipColor(props.controller.filters.missingGpqa)}>
+                {f_formatChipLabel(
+                  props.controller.filters.missingGpqa,
+                  g_hoveredChip() === "missing-gpqa",
+                  "missing GPQA",
+                )}
+              </text>
             </box>
-            <box onMouse={props.controller.toggleMissingLiveCodeBench}>
+            <box
+              onMouseOver={() => fh_setChipHover("missing-lcb", true)}
+              onMouseOut={() => fh_setChipHover("missing-lcb", false)}
+              onMouseDown={() => fh_beginPress("chip-missing-lcb")}
+              onMouseUp={() =>
+                fh_endPress("chip-missing-lcb", props.controller.toggleMissingLiveCodeBench)
+              }
+            >
               <text fg={fh_chipColor(props.controller.filters.missingLiveCodeBench)}>
-                missing LCB
+                {f_formatChipLabel(
+                  props.controller.filters.missingLiveCodeBench,
+                  g_hoveredChip() === "missing-lcb",
+                  "missing LCB",
+                )}
               </text>
             </box>
           </box>
@@ -195,8 +315,16 @@ function ModelOverviewPanel(props: {
                 return (
                   <box
                     width={column.width}
-                    onMouse={() => {
-                      if (vl_key !== null) props.controller.toggleSort(vl_key);
+                    onMouseDown={() => {
+                      if (vl_key === null) {
+                        fh_blurSearch();
+                      } else {
+                        fh_beginPress(`col:${vl_key}`);
+                      }
+                    }}
+                    onMouseUp={() => {
+                      if (vl_key === null) return;
+                      fh_endPress(`col:${vl_key}`, () => props.controller.toggleSort(vl_key));
                     }}
                   >
                     <text fg={vl_active() ? context.theme.text.base : context.theme.text.muted}>
@@ -212,7 +340,12 @@ function ModelOverviewPanel(props: {
               }}
             </For>
           </box>
-          <scrollbox flexGrow={1}>
+          <scrollbox
+            flexGrow={1}
+            onMouseDown={() => {
+              fh_blurSearch();
+            }}
+          >
             <box flexDirection="column">
               <Show when={vl_rows().filteredCount === 0}>
                 <text fg={context.theme.text.muted}>
@@ -221,7 +354,9 @@ function ModelOverviewPanel(props: {
                     : "No models match the current search/filters"}
                 </text>
               </Show>
-              <For each={vl_rows().rows}>{(model) => <OverviewRow model={model} />}</For>
+              <For each={vl_rows().rows}>
+                {(model) => <OverviewRow model={model} onMouseDown={fh_blurSearch} />}
+              </For>
             </box>
           </scrollbox>
           <box paddingLeft={1}>
@@ -351,7 +486,15 @@ function f_setup(context: Plugin.Context): () => void {
 
   const vl_disposePanel = context.ui.slot({
     append: "session.panel",
-    render: (input) => <ModelOverviewPanel input={input} controller={controller} />,
+    render: (input) => (
+      <ModelOverviewPanel
+        input={input}
+        controller={controller}
+        onRefresh={() => {
+          void f_refreshWithToast();
+        }}
+      />
+    ),
   });
   const vl_disposeSidebar = context.ui.slot({
     append: "sidebar.content",

@@ -266,6 +266,42 @@ tunable), schema version, atomic writes in a user cache dir, in-flight dedup, la
   `f_resolveHeaderCollapseEnabled` / `f_resolveCollapsedState`; `.envrc`/`.env.example`,
   `docs/development.md`, and `docs/architecture/ui-integration.md` updated.
   Re-verified: `bun run check` green — **152 tests / 501 assertions**.
+- **Adjustment 2 (owner request, 2026-10-24):** all selectable chips carry an explicit marker — selected
+  renders `[>GPQA]`/`[>LCB]`/`[>free]`/`[>missing GPQA]`/`[>missing LCB]` via pure helper
+  `f_formatChipLabel`, unselected renders `[GPQA]` etc. The search input takes focus only from its own
+  click: initial focus is false, and every other click target (header, ranking/filter chips, refresh,
+  sort headers, rows, scroll area) explicitly clears focus — no reliance on event bubbling; Enter and
+  collapse also clear it. Re-verified: `bun run check` green — **153 tests / 505 assertions**.
+- **Adjustment 3 (owner request, 2026-10-24; revises the Adjustment 2 marker):** chip markers are now
+  three-state — `[>>GPQA]` selected, `[>GPQA]` hovered (transient cursor focus via
+  `onMouseOver`/`onMouseOut`, memory only, guarded hand-off clear), plain `[GPQA]` otherwise; selection
+  wins when both apply. `f_formatChipLabel(selected, hovered, label)` updated with tests. `In $/M` and
+  `Out $/M` columns widened 8→10 cells (header and row cells) so `Out $/M ▲` no longer wraps the sort
+  arrow to a second line. `docs/architecture/ui-integration.md` column note and checklist items 5–6
+  updated. Re-verified: `bun run check` green — **153 tests / 508 assertions**.
+- **Adjustment 4 (owner request, 2026-10-24):** activation is now press-and-release instead of
+  `onMouse` (which fires on every mouse event, including hover — controls appeared always active).
+  Every target records a pressed target on `onMouseDown` and acts on `onMouseUp` only when the
+  pressed target matches; the renderer dispatches `up` to the element under the cursor at release,
+  so the guard prevents press-A/release-B misfires, and the panel root clears the pressed target as
+  a safety net. Search focuses on its own press; all other targets blur it on press. Hover remains
+  `onMouseOver`/`onMouseOut` for the `[>…]` marker only. `docs/architecture/ui-integration.md`
+  mouse-semantics section and checklist updated.
+  Re-verified: `bun run check` green — **153 tests / 508 assertions**.
+- **Adjustment 5 (owner request, 2026-10-24):** after Adjustment 4 all chip
+  clicks went dead. Root cause: press bookkeeping lived in component-local
+  signals, and the host can re-render/re-create a slot component between
+  `down` and `up` (the auto-focus that follows a press is one trigger), which
+  resets them and makes the pressed-target guard cancel every click. Fix:
+  press registry and chip-hover marker moved to module-scope signals
+  (`g_pressedTarget`, `g_hoveredChip`); press-and-release protocol, widget ids,
+  and the root safety clear unchanged. Refresh feedback: the `[refresh]` chip
+  now shows `[refreshing…]` while loading, ignores presses during a refresh,
+  and routes through an `onRefresh` prop wired to `f_refreshWithToast`, so
+  success/failure always toast like the slash command does.
+  `docs/architecture/ui-integration.md` mouse/behaviour sections and checklist
+  updated.
+  Re-verified: `bun run check` green — **153 tests / 508 assertions**.
 
 ### Phase 7 — Testing, security, CI
 Unit suite (normalization, aliases, price units incl. no double-scaling, score→rank, sort directions/ties/missing,

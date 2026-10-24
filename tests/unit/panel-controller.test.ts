@@ -22,6 +22,7 @@ import {
   f_buildStatusLine,
   f_buildStatusLines,
   f_deriveOverviewRows,
+  f_formatChipLabel,
   f_getDefaultSortDirection,
   f_getSortKeyLabel,
   f_nextRankingState,
@@ -106,6 +107,18 @@ describe("format helpers", () => {
     expect(f_truncate("a-very-long-name", 8)).toBe("a-very-…");
     expect(f_truncate("anything", 0)).toBe("");
     expect(f_truncate("anything", 1)).toBe("…");
+  });
+});
+
+describe("chip labels", () => {
+  test("selected chips carry a double marker, hovered a single one", () => {
+    expect(f_formatChipLabel(true, false, "GPQA")).toBe("[>>GPQA]");
+    expect(f_formatChipLabel(false, true, "GPQA")).toBe("[>GPQA]");
+    expect(f_formatChipLabel(false, false, "GPQA")).toBe("[GPQA]");
+    expect(f_formatChipLabel(true, true, "GPQA")).toBe("[>>GPQA]");
+    expect(f_formatChipLabel(true, false, "missing GPQA")).toBe("[>>missing GPQA]");
+    expect(f_formatChipLabel(false, true, "missing LCB")).toBe("[>missing LCB]");
+    expect(f_formatChipLabel(false, false, "free")).toBe("[free]");
   });
 });
 
