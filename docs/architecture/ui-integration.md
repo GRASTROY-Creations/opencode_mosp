@@ -1,8 +1,9 @@
-# UI integration — verified TUI API and Phase 1 PoC
+# UI integration — verified TUI API and model overview panel
 
 **Verified:** 2026-10-24 against `@opencode/plugin@2.1.4` type definitions
-(`dist/tui/*.d.ts`) and `@opentui/solid@0.6.8` (`src/types/elements.d.ts`).
-Everything below marked *verified* comes from those types, not from prose docs.
+(`dist/tui/*.d.ts`) and `@opentui/solid@0.6.8` (`src/types/elements.d.ts`,
+`src/jsx-runtime.ts`). Everything below marked *verified* comes from those
+types/sources, not from prose docs.
 
 ## Entry point and loading
 
@@ -17,9 +18,9 @@ export default Plugin.define({
 
 - `setup` may return a cleanup function; the host calls it on unload.
 - **Development loading (this repo):** `.opencode/plugins/model-overview/`
-  is a plugin directory with the published-package layout: `index.ts` (server
-  entry, inert in Phase 1) and `tui.ts` (TUI entry). The TUI entry re-exports
-  `src/tui.tsx`, so the real code stays in `src/` and is type-checked.
+  is a plugin directory with the published-package layout: `index.ts` (inert
+  server half) and `tui.ts` (TUI entry). The TUI entry re-exports `src/tui.tsx`,
+  so the real code stays in `src/` and is type-checked.
   > **Important:** a flat file such as `.opencode/plugins/model-overview.ts`
   > is discovered as a **server** plugin only. TUI code placed there fails at
   > startup — the server runtime transpiles `.tsx` with a React JSX default and
@@ -29,8 +30,22 @@ export default Plugin.define({
   plugins are listed in the user's `cli.json` (`plugins`). A published package
   does not need the `.opencode/plugins` shim.
 - JSX **must** use `jsxImportSource: "@opentui/solid"`; the OpenTUI intrinsics
-  (`box`, `text`, `b`, `span`, `scrollbox`, …) are declared by that
-  `jsx-runtime`, not by `solid-js`.
+  (`box`, `text`, `input`, `scrollbox`, …) are declared by that `jsx-runtime`,
+  not by `solid-js`.
+
+## Architecture split (Phase 6)
+
+- `src/ui/panel-controller.ts` — all state and pure logic, renderer-agnostic:
+  preferences/search/filter stores, snapshot signals, derived row memo
+  (filter → sort), ranking-leader memo, cache reads, refresh flow, command
+  parsing, and all display strings. Imported host types are **type-only**, so
+  the module is unit-testable without the TUI runtime.
+- `src/ui/format.ts` — pure display formatters (missing → `—`, never `0`).
+- `src/tui.tsx` — SolidJS rendering only: panel table, chips, sidebar strip,
+  dialogs, toasts, slot/keymap registration. No data logic.
+- Reads are **cache-only** (`f_getModelOverview`); network access happens only
+  through an explicit refresh (`f_refreshModelOverview` with the provider
+  adapters). Opening the panel, toggling, sorting, and typing never fetch.
 
 ## Slots (`context.ui.slot`)
 
@@ -42,7 +57,7 @@ export default Plugin.define({
 | `prompt.footer`, `prompt.footer.status`, `prompt.footer.file` | `{ sessionID?, mode, showDetails }` |
 | `session.composer.top` | `{ sessionID }` |
 | **`session.panel`** | `PanelInput` (see below) |
-| `sidebar.content` | `{ sessionID }` |
+| **`sidebar.content`** | `{ sessionID }` |
 | `sidebar.footer` | `{ sessionID }` |
 
 A claim names exactly one placement: `prepend | append | before | after |
@@ -58,7 +73,7 @@ ancestor. Returns a disposer.
 {
   name: string;            // set by ui.panel.open — contributions filter on it
   sessionID: string;
-  width: number;
+  width: number;           // read-only; the host owns sizing
   presentation: "panel" | "fullscreen";
   focused: boolean;
   focus(): void;
@@ -75,9 +90,9 @@ ui.panel.close(): void                    // only this plugin's panel
 ui.panel.current(): { name, sessionID } | undefined   // reactive
 ```
 
-`open` returns `false` when no session is active. This plugin does not render
-anything until `current()?.name === "model-overview"` — the PoC checks the
-incoming slot `name` and wraps output in `<Show>`.
+`open` returns `false` when no session is active (handled with a warning
+toast). The panel contribution renders only when the incoming slot `name`
+matches `model-overview`.
 
 ## Keymap layer (`context.keymap.layer`)
 
@@ -102,66 +117,101 @@ The factory is pure and runs reactively; it returns:
 - `slash.arguments: true` passes the raw argument string to `run(input)`.
 - `keymap.dispatch(id, input)` triggers a command programmatically.
 - `keymap.shortcuts(id)` returns formatted shortcuts for display.
-- We deliberately assign **no** `bind` in Phase 1: guessing a key syntax or
-  colliding with a host binding is worse than palette/slash-only. Bindings can
-  be added later through the user's config.
+- The `bindings` array enables commands whose key syntax comes from the
+  **user's** configuration. We deliberately assign no `bind` ourselves:
+  guessing key syntax or colliding with a host binding is worse than
+  palette/slash-only. Users can bind `model_overview.*` ids in their config.
+
+Registered commands (no binds):
+
+| id | Purpose |
+|---|---|
+| `model_overview.toggle` | open/close the panel (suggested in palette) |
+| `model_overview.status` | dialog with snapshot + per-source freshness |
+| `model_overview.refresh` | `f_refreshModelOverview` with force, toast summary |
+| `model_overview.command` | slash `/model-overview` (alias `/mo`) with raw args |
 
 ## Storage (`context.storage`)
 
 - `store(key, { initial })` → durable, disk-persisted, live-synced across TUI
   instances; returns `[Store<T>, update]` where `update` mutates a draft.
-- `memory(key, { initial })` → ephemeral, survives plugin hot reloads and is
-  shared between old/new generations; gone when the TUI exits.
+- `memory(key, { initial })` → ephemeral, survives plugin hot reloads; gone
+  when the TUI exits.
 
-Preferences live in `memory("model-overview.preferences")` for the PoC. The
-spec requires durable preferences; Phase 4 switches the key to `store()` and
-keeps benchmark data in a separate cache (never mixed with prefs).
+Keys used by the panel (preferences are never mixed with cached data):
 
-## Theme and rendering
+| Key | Kind | Shape |
+|---|---|---|
+| `model-overview.preferences` | `store` | `{ sortKey, sortDirection, ranking, collapsed }` |
+| `model-overview.search` | `memory` | `{ text }` |
+| `model-overview.filters` | `memory` | `{ freeOnly, missingGpqa, missingLiveCodeBench }` |
 
+A stored shape from an older version is normalized once back to defaults at
+startup. Benchmark/model data lives only in the file cache
+(`docs/architecture/caching.md`).
+
+## Mouse and rendering
+
+- The `@opentui/solid` reconciler assigns unknown props with `node[name] =
+  value`; `Renderable` defines setters for `onMouse`, `onMouseDown`,
+  `onMouseUp`, `onMouseDrag`, `onMouseOver`, `onMouseOut`, `onMouseScroll`.
+  So `onMouse={handler}` on `box`/`text` is the supported click binding
+  (verified in the reconciler source).
+- `input` maps `onInput`/`onChange`/`onSubmit` (value string) and the special
+  `focused` prop; `scrollbox` supports `focused`, `stickyScroll`, `stickyStart`.
 - Tokens used: `theme.text.base | muted | faint`, `theme.border.base`,
   `theme.background.raised.base` (all `RGBA`).
-- Intrinsics verified in `@opentui/solid`: `box` (flexDirection, padding*,
-  gap, border, borderStyle, borderColor, backgroundColor, title,
-  bottomTitle, …), `text` (`fg`), `b/strong/em/i/u/span/br/a`.
 - `usePlugin()` returns the `Context` inside slot components — the supported way
   to reach `data`, `ui`, `theme` from a component.
 
-## What the PoC does (`src/tui.tsx`)
+## Panel behaviour (Phase 6)
 
-1. Claims `session.panel` (append) → renders a bordered panel listing up to 12
-   location models with `provider/modelID`, context window, and **base-tier**
-   input/output price. Reads `context.data.location.model.list(location)`.
-2. Claims `sidebar.content` (append) → one-line `models N · overview open|closed`
-   strip.
-3. Registers three palette commands (`toggle`, `status`, `refresh`) and one
-   slash command `/model-overview` with alias `/mo` and raw arguments.
-4. Parses `toggle | status | refresh | sort gpqa|input-price|output-price |
-   ranking gpqa|livecodebench`; unsupported → toast with usage.
-5. Stores `{ sort, ranking }` in memory storage; panel + sidebar read it.
-6. No network calls, no benchmark data, no fabricated values. Data wiring is
-   Phase 3–4; the only live data shown is real registry data.
+1. `session.panel` renders a bordered, titled table with a clickable header
+   row (collapse/expand, `▸`/`▾`), ranking chips (`GPQA` / `LiveCodeBench`),
+   a `[refresh]` chip, a search `<input>`, and filter chips
+   (`free`, `missing GPQA`, `missing LCB`).
+2. Columns: Model, Provider, Ctx, In $/M, Out $/M, GPQA, LCB — each sortable
+   column header is clickable and shows `▲`/`▼` when active. Missing values
+   render as `—`; benchmark cells show `#rank score`.
+3. Rows come from the controller's derived memo: search/provider/presence/free
+   filters composed with AND, then the non-mutating comparator; missing values
+   sort last in both directions.
+4. Footer shows aggregate state, shortened per-source states, last refresh, and
+   warning count; empty cache shows `no cached data — run /model-overview
+   refresh`, filtered-to-nothing shows a distinct message.
+5. `sidebar.content` shows `◫ N models · GPQA #rank name score · panel
+   open|closed · /mo`.
+6. Collapse state survives panel toggles; sorting, search, and filters survive
+   collapse; repeated toggles never fetch.
 
-## Manual verification (requires a build/run by the owner)
+## Manual verification (owner, after build/run)
 
-1. In this project directory, start or reload the TUI (config/plugin changes
-   hot-reload; `/reload` forces it).
-2. `/model-overview toggle` → panel appears; repeating closes it.
-3. `/model-overview status` → dialog with model count, panel state, prefs.
-4. `/model-overview sort input-price` → toast; status reflects the new pref.
-5. Sidebar shows the compact strip; the panel shows real model rows.
-6. Command palette lists the three `Model overview:` entries.
+1. In this project directory, start or reload the TUI (`/reload` forces it).
+2. `/model-overview toggle` → panel appears; clicking the header collapses and
+   expands it; repeating the command closes it.
+3. `/mo refresh` → refresh toast; footer freshness updates; no network on plain
+   open.
+4. Click a column header → sort direction indicator flips; `/mo sort
+   input-price` matches the same state.
+5. Ranking chips switch GPQA ↔ LiveCodeBench; sidebar leader follows.
+6. Search input filters live; `free` / `missing GPQA` / `missing LCB` chips
+   compose.
+7. `/mo status` → dialog with the full status breakdown.
+8. Palette lists the `Model overview:` entries; slash `/mo` autocompletes.
+9. Stop a source (offline) → panel stays usable, footer shows `partial`/`stale`.
 
 If the plugin fails to load, the service log
 (`~/.local/share/opencode/log/opencode.log`) names the file and error.
 
 ## Risks / open items
 
-- `data.location.model.list()` reactivity: read inside a Solid memo; if the host
-  returns snapshots, the list may not live-update until invalidated.
-- Panel height: no scrolling yet; the PoC truncates at 12 rows. Phase 4 uses a
-  `scrollbox` + sortable table.
+- `data.location.model.list()` reactivity: reads happen inside the controller
+  and are refreshed after `data.location.model.sync()`; if the host returns
+  snapshots, the panel may need an explicit invalidate after external changes.
+- Panel width is host-owned (default half of the available width, drag-resizable
+  and persisted by the host). The plugin cannot request a width; a narrower
+  default would require an upstream host option.
+- Filter/search state is intentionally ephemeral; only view preferences are
+  durable.
 - `session.panel` exists only in sessions; on the home screen `open()` returns
   `false` (handled with a warning toast).
-- Mouse interaction (click-to-collapse) is a Phase 5 concern; the API surface
-  for pointer events on slots still needs verification.

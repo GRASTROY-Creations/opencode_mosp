@@ -1,44 +1,42 @@
 /** @jsxImportSource @opentui/solid */
 import { Plugin, usePlugin } from "@opencode/plugin/tui";
-import { createMemo, For, Show } from "solid-js";
+import { For, Show, createMemo, createSignal } from "solid-js";
+import type { ModelBenchmark } from "./domain/model-benchmark";
+import type { ModelSortKey } from "./domain/model-sort";
+import { f_getBenchmarkForModel, type ModelRecord } from "./domain/model-record";
+import {
+  f_formatContext,
+  f_formatPrice,
+  f_formatRank,
+  f_formatScore,
+  f_truncate,
+} from "./ui/format";
+import {
+  f_buildSidebarSummary,
+  f_buildStatusLine,
+  f_buildStatusLines,
+  f_createOverviewController,
+  f_describeSnapshot,
+  f_getSortKeyLabel,
+  f_parseOverviewCommand,
+  k_overviewUsage,
+  type OverviewController,
+} from "./ui/panel-controller";
 
 /**
- * Model Overview — Phase 1 feasibility proof of concept (TUI).
+ * Model Overview — TUI entrypoint (Phase 6).
  *
- * Scope of this file right now:
- * - claim the `session.panel` slot with a panel named `model-overview`
- * - claim a compact strip inside `sidebar.content`
- * - expose `/model-overview` (slash, with arguments) plus palette commands
- *
- * The panel lists the models the location currently exposes through the
- * OpenCode client (`ModelInfo`). Prices shown here are the first cost tier in
- * USD per million tokens, exactly as the registry reports them. GPQA and
- * LiveCodeBench columns are intentionally absent until Phase 3–4 wires the
- * verified sources in; nothing is fabricated.
+ * The panel is a pure renderer over `src/ui/panel-controller.ts`:
+ * - data comes from the cache only (`f_getModelOverview`); opening, toggling,
+ *   sorting, searching, and filtering never trigger a network request;
+ * - `refresh` (chip, palette, or `/model-overview refresh`) is the single
+ *   explicit path that talks to sources, with per-source failure isolation;
+ * - missing values render as an em dash and are never invented.
  */
 
-const k_PANEL_NAME = "model-overview";
-const k_PREFERENCES_KEY = "model-overview.preferences";
-const k_MAX_VISIBLE_MODELS = 12;
-const k_USAGE =
-  "/model-overview [toggle | status | refresh | sort gpqa|input-price|output-price | ranking gpqa|livecodebench]";
+const k_panelName = "model-overview";
 
-type SortField = "gpqa" | "input-price" | "output-price";
-type RankingSource = "gpqa" | "livecodebench";
-
-interface OverviewPreferences {
-  sort: SortField;
-  ranking: RankingSource;
-}
-
-type OverviewCommand =
-  | { readonly kind: "toggle" }
-  | { readonly kind: "status" }
-  | { readonly kind: "refresh" }
-  | { readonly kind: "sort"; readonly field: SortField }
-  | { readonly kind: "ranking"; readonly ranking: RankingSource };
-
-/** The subset of the host's panel input this PoC renders from. */
+/** The subset of the host's panel input this panel renders from. */
 interface PanelView {
   readonly name: string;
   readonly sessionID: string;
@@ -50,120 +48,223 @@ interface PanelView {
   readonly toggleFullscreen: () => void;
 }
 
-function f_parseCommand(raw: string): OverviewCommand | undefined {
-  const tokens = raw
-    .trim()
-    .toLowerCase()
-    .split(/\s+/)
-    .filter((token) => token.length > 0);
-  const [head, target] = tokens;
-
-  if (head === undefined || head === "toggle") return { kind: "toggle" };
-  if (head === "status") return { kind: "status" };
-  if (head === "refresh") return { kind: "refresh" };
-  if (head === "sort") {
-    if (target === "gpqa" || target === "input-price" || target === "output-price") {
-      return { kind: "sort", field: target };
-    }
-    return undefined;
-  }
-  if (head === "ranking") {
-    if (target === "gpqa" || target === "livecodebench") {
-      return { kind: "ranking", ranking: target };
-    }
-    return undefined;
-  }
-  return undefined;
+interface OverviewColumn {
+  readonly key: ModelSortKey | null;
+  readonly label: string;
+  readonly width: number;
 }
 
-function f_formatPrice(usdPerMillion: number): string {
-  if (usdPerMillion === 0) return "free";
-  return `$${usdPerMillion.toFixed(2)}/M`;
+const k_columns: readonly OverviewColumn[] = [
+  { key: "name", label: "Model", width: 24 },
+  { key: "providerName", label: "Provider", width: 14 },
+  { key: null, label: "Ctx", width: 6 },
+  { key: "inputPrice", label: "In $/M", width: 8 },
+  { key: "outputPrice", label: "Out $/M", width: 8 },
+  { key: "gpqaRank", label: "GPQA", width: 11 },
+  { key: "livecodebenchRank", label: "LCB", width: 11 },
+];
+
+/** `#rank score` when both exist; a lone value still renders. */
+function f_formatBenchmarkCell(p_benchmark: ModelBenchmark | null): string {
+  if (p_benchmark === null) return "—";
+  const vl_parts: string[] = [];
+  if (p_benchmark.rank !== null) vl_parts.push(f_formatRank(p_benchmark.rank));
+  if (p_benchmark.score !== null) vl_parts.push(f_formatScore(p_benchmark.score));
+  return vl_parts.length > 0 ? vl_parts.join(" ") : "—";
 }
 
-function f_formatContext(tokens: number): string {
-  if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(1)}M ctx`;
-  return `${Math.round(tokens / 1000)}K ctx`;
+function OverviewRow(props: { readonly model: ModelRecord }) {
+  const context = usePlugin();
+  const vl_gpqa = f_getBenchmarkForModel(props.model, "gpqa");
+  const vl_liveCodeBench = f_getBenchmarkForModel(props.model, "livecodebench");
+  return (
+    <box flexDirection="row" gap={1} paddingLeft={1}>
+      <box width={24}>
+        <text fg={context.theme.text.base}>{f_truncate(props.model.name, 23)}</text>
+      </box>
+      <box width={14}>
+        <text fg={context.theme.text.muted}>{f_truncate(props.model.providerName, 13)}</text>
+      </box>
+      <box width={6}>
+        <text fg={context.theme.text.muted}>{f_formatContext(props.model.contextWindow)}</text>
+      </box>
+      <box width={8}>
+        <text fg={context.theme.text.base}>
+          {f_formatPrice(props.model.pricing.inputUsdPerMillionTokens)}
+        </text>
+      </box>
+      <box width={8}>
+        <text fg={context.theme.text.base}>
+          {f_formatPrice(props.model.pricing.outputUsdPerMillionTokens)}
+        </text>
+      </box>
+      <box width={11}>
+        <text fg={context.theme.text.base}>{f_formatBenchmarkCell(vl_gpqa)}</text>
+      </box>
+      <box width={11}>
+        <text fg={context.theme.text.base}>{f_formatBenchmarkCell(vl_liveCodeBench)}</text>
+      </box>
+    </box>
+  );
 }
 
 function ModelOverviewPanel(props: {
   readonly input: PanelView;
-  readonly preferences: OverviewPreferences;
+  readonly controller: OverviewController;
 }) {
   const context = usePlugin();
-  const models = createMemo(() => context.data.location.model.list(context.location) ?? []);
-  const visible = createMemo(() => models().slice(0, k_MAX_VISIBLE_MODELS));
+  const [vl_searchFocused, vl_setSearchFocused] = createSignal(false);
+  const vl_collapsed = () => props.controller.preferences.collapsed;
+  const vl_rows = () => props.controller.rows();
+  const vl_modelCount = () => props.controller.snapshot()?.models.length ?? 0;
+  const fh_chipColor = (p_active: boolean) =>
+    p_active ? context.theme.text.base : context.theme.text.faint;
 
   return (
-    <Show when={props.input.name === k_PANEL_NAME}>
+    <Show when={props.input.name === k_panelName}>
       <box
         flexDirection="column"
-        padding={1}
-        gap={1}
+        gap={0}
         border={true}
         borderStyle="single"
         borderColor={context.theme.border.base}
         backgroundColor={context.theme.background.raised.base}
-        title="Model Overview — Phase 1 PoC"
-        bottomTitle="esc closes · /model-overview toggle"
+        title="Model Overview"
+        bottomTitle="esc closes · click header to collapse · /model-overview toggle"
         bottomTitleAlignment="right"
       >
-        <text fg={context.theme.text.muted}>
-          {models().length} models · sort {props.preferences.sort} · ranking {props.preferences.ranking} · GPQA/LCB
-          land in Phase 3–4
-        </text>
-        <For each={visible()}>
-          {(model) => {
-            const base = model.cost[0];
-            const inputPrice = base ? f_formatPrice(base.input) : "n/a";
-            const outputPrice = base ? f_formatPrice(base.output) : "n/a";
-            const tiers = model.cost.length > 1 ? ` · ${model.cost.length} tiers` : "";
-            return (
-              <text fg={context.theme.text.base}>
-                {model.providerID}/{model.modelID} · {f_formatContext(model.limit.context)} · in {inputPrice} · out{" "}
-                {outputPrice}
-                {tiers}
-              </text>
-            );
-          }}
-        </For>
-        <Show when={models().length > k_MAX_VISIBLE_MODELS}>
+        <box flexDirection="row" gap={1} paddingLeft={1} onMouse={props.controller.toggleCollapsed}>
+          <text fg={context.theme.text.base}>{vl_collapsed() ? "▸" : "▾"} Model Overview</text>
           <text fg={context.theme.text.faint}>
-            … {models().length - k_MAX_VISIBLE_MODELS} more — the sortable table arrives in Phase 4
+            {vl_modelCount()} models{props.controller.loading() ? " · refreshing…" : ""}
           </text>
+        </box>
+        <Show when={!vl_collapsed()}>
+          <box flexDirection="row" gap={1} paddingLeft={1}>
+            <box onMouse={() => props.controller.setRanking("gpqa")}>
+              <text fg={fh_chipColor(props.controller.preferences.ranking === "gpqa")}>[GPQA]</text>
+            </box>
+            <box onMouse={() => props.controller.setRanking("livecodebench")}>
+              <text fg={fh_chipColor(props.controller.preferences.ranking === "livecodebench")}>
+                [LCB]
+              </text>
+            </box>
+            <box
+              onMouse={() => {
+                void props.controller.refresh(true);
+              }}
+            >
+              <text fg={context.theme.text.muted}>[refresh]</text>
+            </box>
+            <input
+              placeholder="search"
+              value={props.controller.search.text}
+              focused={vl_searchFocused()}
+              onInput={(p_value) => props.controller.setSearchText(p_value)}
+              onSubmit={() => vl_setSearchFocused(false)}
+              onMouse={() => vl_setSearchFocused(true)}
+            />
+          </box>
+          <box flexDirection="row" gap={1} paddingLeft={1}>
+            <box onMouse={props.controller.toggleFreeOnly}>
+              <text fg={fh_chipColor(props.controller.filters.freeOnly)}>free</text>
+            </box>
+            <box onMouse={props.controller.toggleMissingGpqa}>
+              <text fg={fh_chipColor(props.controller.filters.missingGpqa)}>missing GPQA</text>
+            </box>
+            <box onMouse={props.controller.toggleMissingLiveCodeBench}>
+              <text fg={fh_chipColor(props.controller.filters.missingLiveCodeBench)}>
+                missing LCB
+              </text>
+            </box>
+          </box>
+          <box flexDirection="row" gap={1} paddingLeft={1}>
+            <For each={k_columns}>
+              {(column) => {
+                const vl_key = column.key;
+                const vl_active = (): boolean =>
+                  vl_key !== null && props.controller.preferences.sortKey === vl_key;
+                return (
+                  <box
+                    width={column.width}
+                    onMouse={() => {
+                      if (vl_key !== null) props.controller.toggleSort(vl_key);
+                    }}
+                  >
+                    <text fg={vl_active() ? context.theme.text.base : context.theme.text.muted}>
+                      {column.label}
+                      {vl_active()
+                        ? props.controller.preferences.sortDirection === "asc"
+                          ? " ▲"
+                          : " ▼"
+                        : ""}
+                    </text>
+                  </box>
+                );
+              }}
+            </For>
+          </box>
+          <scrollbox flexGrow={1}>
+            <box flexDirection="column">
+              <Show when={vl_rows().filteredCount === 0}>
+                <text fg={context.theme.text.muted}>
+                  {vl_rows().totalCount === 0
+                    ? "No cached models — run /model-overview refresh"
+                    : "No models match the current search/filters"}
+                </text>
+              </Show>
+              <For each={vl_rows().rows}>{(model) => <OverviewRow model={model} />}</For>
+            </box>
+          </scrollbox>
+          <box paddingLeft={1}>
+            <text fg={context.theme.text.faint}>
+              {f_buildStatusLine(
+                props.controller.snapshot(),
+                props.controller.loading(),
+                props.controller.lastError(),
+              )}
+            </text>
+          </box>
         </Show>
       </box>
     </Show>
   );
 }
 
-function SidebarStatus() {
+function SidebarStatus(props: { readonly controller: OverviewController }) {
   const context = usePlugin();
-  const models = createMemo(() => context.data.location.model.list(context.location) ?? []);
-  const state = createMemo(() => (context.ui.panel.current() === undefined ? "closed" : "open"));
-
+  const vl_summary = createMemo(() =>
+    f_buildSidebarSummary(
+      props.controller.rankingLeader(),
+      props.controller.snapshot()?.models.length ?? 0,
+      props.controller.preferences.ranking,
+    ),
+  );
+  const vl_panel = createMemo(() =>
+    context.ui.panel.current() === undefined ? "closed" : "open",
+  );
   return (
     <box flexDirection="row" paddingLeft={1}>
       <text fg={context.theme.text.muted}>
-        models {models().length} · overview {state()}
+        {`◫ ${vl_summary()} · panel ${vl_panel()} · /mo`}
       </text>
     </box>
   );
 }
 
 function f_setup(context: Plugin.Context): () => void {
-  const [preferences, setPreferences] = context.storage.memory<OverviewPreferences>(k_PREFERENCES_KEY, {
-    initial: { sort: "gpqa", ranking: "gpqa" },
-  });
+  const controller = f_createOverviewController(context);
+  void controller.loadFromCache();
 
-  function f_toggle(): void {
-    if (context.ui.panel.current() !== undefined) {
+  function f_togglePanel(): void {
+    const vl_current = context.ui.panel.current();
+    if (vl_current?.name === k_panelName) {
       context.ui.panel.close();
       context.ui.toast.show({ title: "Model overview", message: "Panel closed.", variant: "info" });
       return;
     }
-    const opened = context.ui.panel.open(k_PANEL_NAME, { presentation: "panel" });
-    if (!opened) {
+    const vl_opened = context.ui.panel.open(k_panelName, { presentation: "panel" });
+    if (!vl_opened) {
       context.ui.toast.show({
         title: "Model overview",
         message: "No active session — open a session first.",
@@ -172,79 +273,81 @@ function f_setup(context: Plugin.Context): () => void {
     }
   }
 
-  function f_refresh(): void {
-    context.ui.toast.show({
-      title: "Model overview",
-      message: "Phase 1 stub: refresh is wired to the real sources in Phase 3. No request was made.",
-      variant: "info",
-    });
-  }
-
-  function f_showStatus(): void {
-    const models = context.data.location.model.list(context.location) ?? [];
-    const panel = context.ui.panel.current();
-    const lines = [
-      `Plugin id: ${context.app ? "opencode_model_overview.tui" : "unknown"}`,
-      `Models visible in this location: ${models.length}`,
-      `Panel: ${panel?.name ?? "closed"}`,
-      `Sort: ${preferences.sort} · Ranking: ${preferences.ranking}`,
-      "Sources: OpenCode registry verified; HF GPQA + LiveCodeBench verified (see docs/api/).",
-      "Not wired yet: benchmark columns, refresh, cache (Phase 2–4).",
-    ];
-    void context.ui.dialog.alert({ title: "Model overview — Phase 1 PoC", message: lines.join("\n") });
-  }
-
-  function f_runCommand(raw?: string): void {
-    const command = f_parseCommand(raw ?? "");
-    if (command === undefined) {
+  async function f_refreshWithToast(): Promise<void> {
+    const vl_snapshot = await controller.refresh(true);
+    if (vl_snapshot === undefined) {
       context.ui.toast.show({
         title: "Model overview",
-        message: `Unknown command. Usage: ${k_USAGE}`,
+        message: "Refresh failed — see /model-overview status for details.",
         variant: "warning",
       });
       return;
     }
+    context.ui.toast.show({ title: "Model overview", message: f_describeSnapshot(vl_snapshot) });
+  }
 
-    switch (command.kind) {
+  function f_showStatus(): void {
+    const vl_lines = f_buildStatusLines(
+      controller.snapshot(),
+      controller.rows(),
+      controller.preferences,
+      controller.search.text,
+      controller.filters,
+      controller.loading(),
+      controller.lastError(),
+    );
+    void context.ui.dialog.alert({
+      title: "Model overview status",
+      message: vl_lines.join("\n"),
+    });
+  }
+
+  function f_runCommand(raw?: string): void {
+    const vl_command = f_parseOverviewCommand(raw ?? "");
+    if (vl_command === undefined) {
+      context.ui.toast.show({
+        title: "Model overview",
+        message: `Unknown command. Usage: ${k_overviewUsage}`,
+        variant: "warning",
+      });
+      return;
+    }
+    switch (vl_command.kind) {
       case "toggle":
-        f_toggle();
+        f_togglePanel();
         return;
       case "status":
         f_showStatus();
         return;
       case "refresh":
-        f_refresh();
+        void f_refreshWithToast();
         return;
       case "sort":
-        void setPreferences((draft) => {
-          draft.sort = command.field;
-        });
+        controller.toggleSort(vl_command.key);
         context.ui.toast.show({
           title: "Model overview",
-          message: `Sort preference set to "${command.field}" (applied by the real table in Phase 4).`,
+          message: `Sorting by ${f_getSortKeyLabel(vl_command.key)}.`,
           variant: "info",
         });
         return;
       case "ranking":
-        void setPreferences((draft) => {
-          draft.ranking = command.ranking;
-        });
+        controller.setRanking(vl_command.ranking);
         context.ui.toast.show({
           title: "Model overview",
-          message: `Ranking source set to "${command.ranking}" (GPQA/LCB data arrives in Phase 3–4).`,
+          message: `Ranking on ${vl_command.ranking === "gpqa" ? "GPQA" : "LiveCodeBench"}.`,
           variant: "info",
         });
         return;
     }
   }
 
-  const disposePanel = context.ui.slot({
+  const vl_disposePanel = context.ui.slot({
     append: "session.panel",
-    render: (input) => <ModelOverviewPanel input={input} preferences={preferences} />,
+    render: (input) => <ModelOverviewPanel input={input} controller={controller} />,
   });
-  const disposeSidebar = context.ui.slot({
+  const vl_disposeSidebar = context.ui.slot({
     append: "sidebar.content",
-    render: () => <SidebarStatus />,
+    render: () => <SidebarStatus controller={controller} />,
   });
 
   context.keymap.layer(() => ({
@@ -256,7 +359,7 @@ function f_setup(context: Plugin.Context): () => void {
         group: "Model overview",
         palette: true,
         suggested: true,
-        run: f_toggle,
+        run: f_togglePanel,
       },
       {
         id: "model_overview.status",
@@ -270,7 +373,7 @@ function f_setup(context: Plugin.Context): () => void {
         title: "Model overview: refresh data",
         group: "Model overview",
         palette: true,
-        run: f_refresh,
+        run: f_refreshWithToast,
       },
       {
         id: "model_overview.command",
@@ -283,8 +386,8 @@ function f_setup(context: Plugin.Context): () => void {
   }));
 
   return () => {
-    disposePanel();
-    disposeSidebar();
+    vl_disposePanel();
+    vl_disposeSidebar();
   };
 }
 

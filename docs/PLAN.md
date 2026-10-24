@@ -239,7 +239,7 @@ tunable), schema version, atomic writes in a user cache dir, in-flight dedup, la
 - **Results:** 31 new tests → **123 tests / 406 assertions**; `bun run check` green. New `docs/architecture/caching.md`;
   `docs/architecture/data-flow.md` updated.
 
-### Phase 6 — UI (SolidJS + OpenTUI)
+### Phase 6 — UI (SolidJS + OpenTUI) — **DONE (2026-10-24)** *(visual gate pending owner run)*
 - `session.panel` table: sticky header, scroll, all sortable columns with active-column/direction indicator,
   ranking selector (GPQA ↔ LiveCodeBench), search field, provider/missing/free filters, refresh action,
   last-refresh + per-source freshness/stale/error status, empty state, `N/A`/`—` for missing.
@@ -249,6 +249,16 @@ tunable), schema version, atomic writes in a user cache dir, in-flight dedup, la
 - Commands via `keymap.layer`: `/model-overview [refresh|sort gpqa|sort input-price|sort output-price|ranking livecodebench|toggle|status]`, palette entry, keybind.
 - UI kept behind adapter (`panel-controller` decoupled from renderer) so data layer is reusable.
 - **Gate:** table usable with complete *and* incomplete source data; both toggle mechanisms work in 2.1.4.
+- **Implemented:** `src/ui/panel-controller.ts` (renderer-agnostic state: durable view prefs with legacy
+  normalization, memory search/filters, snapshot signals, filter→sort memo, ranking-leader memo, cache-only
+  reads, refresh via `f_refreshModelOverview`, command parsing, status/sidebar strings); `src/ui/format.ts`
+  (display formatters, missing → `—`); `src/tui.tsx` rewritten as rendering-only table (clickable collapse
+  header, ranking chips, refresh chip, search input, filter chips, clickable sort headers with `▲`/`▼`,
+  `scrollbox` rows, status footer, sidebar summary). Commands registered palette+slash **without binds**
+  (deliberate: bind ids are user-config territory). 26 new tests in `tests/unit/panel-controller.test.ts`.
+  Verified: no fetch on panel open/toggle/sort; refetch only on explicit refresh.
+- **Gate result:** `bun run check` green — typecheck, lint, 150 tests / 483 assertions across 11 files.
+  Owner visual run still to do (checklist in `docs/architecture/ui-integration.md`).
 
 ### Phase 7 — Testing, security, CI
 Unit suite (normalization, aliases, price units incl. no double-scaling, score→rank, sort directions/ties/missing,

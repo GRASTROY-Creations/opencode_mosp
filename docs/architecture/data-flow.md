@@ -1,7 +1,7 @@
 # Data Flow
 
-**Status:** Phase 4 complete (2026-10-24). Later phases add aggregation, caching,
-and UI on top of these boundaries.
+**Status:** Phase 6 complete (2026-10-24). The UI renders only cached snapshots;
+live fetches happen solely through explicit refreshes.
 
 ## Pipeline
 
@@ -99,5 +99,8 @@ includes query strings, headers, or credentials in errors.
   implemented in `src/services/`.
 - **Phase 5 (done):** aggregation and per-source caching wrap the adapters;
   live fetches remain explicit/background, never on panel open or keystroke.
-- **Phase 6:** replace the Phase 1 PoC panel with the real SolidJS/OpenTUI UI
-  wired to `f_getModelOverview` / `f_refreshModelOverview`.
+- **Phase 6 (done):** the PoC panel was replaced by the real UI
+  (`src/ui/panel-controller.ts` + `src/tui.tsx`), wired to
+  `f_getModelOverview` for cache-only reads and `f_refreshModelOverview` for
+  explicit refreshes. See `docs/architecture/ui-integration.md`.
+- **Phase 7 (next):** testing, security, and CI hardening.
