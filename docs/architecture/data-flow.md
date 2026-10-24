@@ -78,9 +78,26 @@ must leave registry/pricing data usable and mark only that source stale or
 unavailable. The retry helper never retries authentication failures and never
 includes query strings, headers, or credentials in errors.
 
+## Aggregation and caching
+
+`src/services/model-overview.ts` assembles snapshots and
+`src/services/cache.ts` persists per-source payloads:
+
+- `f_getModelOverview` / `f_getOverviewStatus` are cache-only reads; panel opens
+  and keystrokes never start a live request.
+- `f_refreshModelOverview` refreshes stale/missing/forced sources in parallel,
+  preserves last-known-good entries on failure, and deduplicates concurrent
+  refreshes per cache key.
+- `f_mergeModelSources` fills null metadata, merges pricing tiers by threshold,
+  and unions benchmarks by ID without inventing values.
+- Status derivation and storage rules are documented in
+  `docs/architecture/caching.md`.
+
 ## Next phases
 
 - **Phase 4 (done):** matching, deterministic sorting/ranks, and filters are
   implemented in `src/services/`.
-- **Phase 5:** aggregation and per-source cache wrap the adapters; live fetches
-  remain explicit/background, never on panel open or keystroke.
+- **Phase 5 (done):** aggregation and per-source caching wrap the adapters;
+  live fetches remain explicit/background, never on panel open or keystroke.
+- **Phase 6:** replace the Phase 1 PoC panel with the real SolidJS/OpenTUI UI
+  wired to `f_getModelOverview` / `f_refreshModelOverview`.

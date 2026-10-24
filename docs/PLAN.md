@@ -226,12 +226,18 @@ numeric prices, rank-vs-score distinct; default `gpqaRank asc`. Search + provide
   missing values stay `null`, ranks are only derived from non-null scores, and existing benchmark rows are not
   overwritten. Docs updated in `docs/architecture/data-flow.md`.
 
-### Phase 5 — Aggregation & caching
+### Phase 5 — Aggregation & caching — **DONE (2026-10-24)**
 `model-overview.ts`: `f_getModelOverview / f_refreshModelOverview / f_mergeModelSources / f_matchBenchmarkRecords /
 f_getOverviewStatus / f_sortModels / f_filterModels`. Independent per-source fetch + failure isolation (one source down ⇒
 partial table, stale label; never whole-service crash). Cache: per-source keys, TTLs (models/pricing 1h, benchmarks 6h —
 tunable), schema version, atomic writes in a user cache dir, in-flight dedup, last-known-good preservation.
-- **Gate:** service returns usable partial results when any single optional source fails.
+- **Gate:** service returns usable partial results when any single optional source fails. ✅
+- **Implemented:** `src/services/cache.ts` (versioned envelope, memory + atomic file caches, TTL/env resolution,
+  `OPENCODE_MODEL_OVERVIEW_CACHE_DIR`), `src/services/model-overview.ts` (cache-only reads, parallel refresh with
+  in-flight dedup, last-known-good on failure, merge, derived `opencode-pricing` status, sanitized loader errors).
+  `opencode-pricing` is a derived view of the registry payload — no fourth cache entry.
+- **Results:** 31 new tests → **123 tests / 406 assertions**; `bun run check` green. New `docs/architecture/caching.md`;
+  `docs/architecture/data-flow.md` updated.
 
 ### Phase 6 — UI (SolidJS + OpenTUI)
 - `session.panel` table: sticky header, scroll, all sortable columns with active-column/direction indicator,
