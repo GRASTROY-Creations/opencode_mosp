@@ -109,9 +109,10 @@ opencode_model_overview/
 ├── package.json  tsconfig.json  eslint.config.js  README.md  CHANGELOG.md  LICENSE
 ```
 
-Entry-point decision (KNOWLEDGE_03 §4): keep `src/` as source of truth; for local development, load via a thin
-`.opencode/plugins/opencode-model-overview.ts` that re-exports from `src/` (single implementation, no copies).
-Final form = publishable package with `"./tui"` export + `plugins` entry in `opencode.json(c)`.
+Entry-point decision (KNOWLEDGE_03 §4): keep `src/` as source of truth; for local development, load via a
+`.opencode/plugins/model-overview/` **directory** (`index.ts` server entry + `tui.ts` TUI entry, each a thin re-export
+from `src/`) (single implementation, no copies). A flat file in `.opencode/plugins/` is server-only and cannot host the
+TUI plugin. Final form = publishable package with `"./tui"` export + `plugins` entry in `opencode.json(c)`.
 
 ---
 
@@ -142,7 +143,7 @@ Final form = publishable package with `"./tui"` export + `plugins` entry in `ope
   npm scripts deferred to Phase 3 (their script files don't exist yet). All deviations recorded in
   `docs/development.md`. `direnv allow` intentionally left to the user.
 
-### Phase 1 — Feasibility PoC + source verification *(the hard gates)*
+### Phase 1 — Feasibility PoC + source verification *(the hard gates)* — **CODE DONE (2026-10-24); visual gate pending owner run**
 1. Minimal TUI plugin: register `session.panel` contribution + compact `sidebar.content` status +
    `/model-overview` (and `toggle`) slash commands; verify it **loads and toggles in opencode 2.1.4**.
 2. Dump/inspect real `Model.Info` schema: IDs, names, `limit.context`, `cost` tier fields + **units**.
@@ -152,6 +153,23 @@ Final form = publishable package with `"./tui"` export + `plugins` entry in `ope
    - Inspect `bnc4vk/opencode-model-scorecard`: pricing source, refresh scripts, `tui.tsx`, **license** (attribution if reused).
 - **Gate:** PoC panel renders + command toggles (documented in `docs/architecture/ui-integration.md`); every external
   source is verified or explicitly flagged unavailable with a snapshot fallback designed.
+
+**Results:**
+- PoC implemented in `src/tui.tsx` (+ `.opencode/plugins/model-overview/{index,tui}.ts` dev loader): panel, sidebar strip,
+  palette commands, `/model-overview` with arguments. `typecheck` + `lint` green. **Owner must start/reload the
+  TUI to confirm rendering/toggling** — checklist in `docs/architecture/ui-integration.md`.
+- `Model.Info` verified live (16 models, 1 provider). `cost` unit is schema-named
+  `Money.USDPerMillionTokens`; tiers are `{ tier: { type: "context", size } }` (semantics assumed).
+  Pricing doc: `docs/api/opencode-pricing.md`; fixture: `tests/fixtures/model-info.sample.json`.
+- **GPQA verified:** `GET https://huggingface.co/api/datasets/Idavidrein/gpqa/leaderboard` → 115 rows /
+  97 models; filter `.eval_results/gpqa_diamond.yaml`; 25 Diamond rows; `verified: false` on all rows;
+  higher-is-better. `docs/api/huggingface-gpqa.md` + fixture.
+- **LiveCodeBench verified:** `https://livecodebench.github.io/performances_generation.json` (the exact file the
+  official page fetches) → 29,540 rows / 28 models. Join on `models[].model_repr`, **not** `model_name`.
+  `docs/api/livecodebench.md` + fixture.
+- **`bnc4vk/opencode-model-scorecard`:** MIT, but V1-era (`@opencode-ai/plugin@1.x`, `oc-plugin` field). Its data
+  comes from HTML scraping (opencode.ai stats page, tbench.ai, artificialanalysis.ai) — **not reused**. We use the
+  model registry for pricing. No attribution obligation; noted in `docs/architecture/ui-integration.md` context.
 
 ### Phase 2 — Domain contracts
 `src/domain/*`: `ModelRecord`, `ModelPricing` (USD/1M in/out, currency, source, observedAt), `ModelBenchmark`

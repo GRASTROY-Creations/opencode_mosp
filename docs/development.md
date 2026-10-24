@@ -55,7 +55,7 @@ Re-check TS 7 compatibility with the lint toolchain when `typescript-eslint` rel
 
 Additions required by the real toolchain (strictness was **not** weakened):
 
-- `"jsx": "preserve"` + `"jsxImportSource": "solid-js"` — needed for `.tsx` TUI sources; Bun transpiles, `tsc` only typechecks.
+- `"jsx": "preserve"` + `"jsxImportSource": "@opentui/solid"` — required for the OpenTUI intrinsics (`box`, `text`, `b`, …); `solid-js` does not declare them (this was corrected during Phase 1). Bun transpiles, `tsc` only typechecks.
 - `"esModuleInterop": true` — interop with the plugin SDK's CommonJS-shaped type packages.
 - `include` covers both `src/**/*.ts` and `src/**/*.tsx`.
 
@@ -66,7 +66,7 @@ Additions required by the real toolchain (strictness was **not** weakened):
 
 ## Loading the plugin during development
 
-`.opencode/plugins/` is the project-local plugin directory. The Phase 1 PoC will add a **thin** entry there that re-exports `src/tui.tsx`/`src/index.ts` so there is exactly one copy of plugin logic (see docs/PLAN.md §5). Global/published usage uses `opencode.json` `plugins` (server+TUI) or `cli.json` `plugins` (terminal-only).
+`.opencode/plugins/` is the project-local plugin directory, and OpenCode auto-loads it. A project plugin uses the published-package layout: a **directory** containing `index.ts` (server) and `tui.ts` (TUI). This repo has `.opencode/plugins/model-overview/index.ts` (inert server stub) and `.opencode/plugins/model-overview/tui.ts` (re-exports `src/tui.tsx`), so there is exactly one copy of plugin logic. A **flat** `.opencode/plugins/<name>.ts` is treated as a server plugin only and fails if it pulls in TUI/JSX code. Published usage uses the package `./tui` export plus `cli.json` `plugins` (terminal-only) or `opencode.json` `plugins`. Details and the verification checklist: `docs/architecture/ui-integration.md`.
 
 ## Planned scripts
 

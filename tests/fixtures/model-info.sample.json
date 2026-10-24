@@ -1,0 +1,172 @@
+[
+  {
+    "id": "claude-haiku-5-5",
+    "modelID": "claude-haiku-5-5",
+    "providerID": "opencode",
+    "family": "claude-haiku",
+    "name": "Claude Haiku 5.5",
+    "capabilities": {
+      "tools": true,
+      "input": [
+        "text",
+        "image",
+        "pdf"
+      ],
+      "output": [
+        "text"
+      ],
+      "temperature": false
+    },
+    "variants": [
+      {
+        "id": "none"
+      },
+      {
+        "id": "low"
+      },
+      {
+        "id": "medium"
+      },
+      {
+        "id": "high"
+      },
+      {
+        "id": "xhigh"
+      },
+      {
+        "id": "max"
+      }
+    ],
+    "time": {
+      "released": 1791331200000
+    },
+    "cost": [
+      {
+        "input": 0.1,
+        "output": 0.5,
+        "cache": {
+          "read": 0.01,
+          "write": 0.125
+        }
+      },
+      {
+        "tier": {
+          "type": "context",
+          "size": 100000
+        },
+        "input": 0.5,
+        "output": 2.5,
+        "cache": {
+          "read": 0.05,
+          "write": 0.625
+        }
+      }
+    ],
+    "status": "active",
+    "enabled": true,
+    "limit": {
+      "context": 1000000,
+      "output": 128000
+    }
+  },
+  {
+    "id": "deepseek-v4.1-flash-free",
+    "modelID": "deepseek-v4.1-flash-free",
+    "providerID": "opencode",
+    "family": "deepseek-flash",
+    "name": "DeepSeek V4.1 Flash Free",
+    "capabilities": {
+      "tools": true,
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "temperature": true
+    },
+    "variants": [
+      {
+        "id": "low"
+      },
+      {
+        "id": "high"
+      },
+      {
+        "id": "max"
+      }
+    ],
+    "time": {
+      "released": 1788998400000
+    },
+    "cost": [
+      {
+        "input": 0,
+        "output": 0,
+        "cache": {
+          "read": 0,
+          "write": 0
+        }
+      }
+    ],
+    "status": "active",
+    "enabled": true,
+    "limit": {
+      "context": 200000,
+      "output": 32000
+    }
+  },
+  {
+    "id": "gpt-5-nano",
+    "modelID": "gpt-5-nano",
+    "providerID": "opencode",
+    "family": "gpt-nano",
+    "name": "GPT-5 Nano",
+    "capabilities": {
+      "tools": true,
+      "input": [
+        "text",
+        "image"
+      ],
+      "output": [
+        "text"
+      ],
+      "temperature": false
+    },
+    "variants": [
+      {
+        "id": "minimal"
+      },
+      {
+        "id": "low"
+      },
+      {
+        "id": "medium"
+      },
+      {
+        "id": "high"
+      }
+    ],
+    "time": {
+      "released": 1754524800000
+    },
+    "cost": [
+      {
+        "input": 0.05,
+        "output": 0.4,
+        "cache": {
+          "read": 0.005,
+          "write": 0
+        }
+      }
+    ],
+    "status": "active",
+    "enabled": true,
+    "limit": {
+      "context": 400000,
+      "input": 272000,
+      "output": 128000
+    }
+  }
+]

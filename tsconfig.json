@@ -15,7 +15,7 @@
     "noEmit": true,
     "esModuleInterop": true,
     "jsx": "preserve",
-    "jsxImportSource": "solid-js"
+    "jsxImportSource": "@opentui/solid"
   },
   "include": [
     "src/**/*.ts",
