@@ -171,11 +171,20 @@ TUI plugin. Final form = publishable package with `"./tui"` export + `plugins` e
   comes from HTML scraping (opencode.ai stats page, tbench.ai, artificialanalysis.ai) — **not reused**. We use the
   model registry for pricing. No attribution obligation; noted in `docs/architecture/ui-integration.md` context.
 
-### Phase 2 — Domain contracts
+### Phase 2 — Domain contracts — **DONE (2026-10-24)**
 `src/domain/*`: `ModelRecord`, `ModelPricing` (USD/1M in/out, currency, source, observedAt), `ModelBenchmark`
 (score ≠ rank, sourceUrl, evaluatedAt), `ModelSource`, `RankingMode`, `SortDirection`, `ModelSortKey`.
 Validation for external data boundaries.
-- **Gate:** unit tests on types/normalization run without network.
+- **Gate:** unit tests on types/normalization run without network. ✅
+- **Implemented:** `guards.ts` (typed `DomainResult`, JSON/timestamp/number/URL/union parsers),
+  `model-pricing.ts` (base + context-tier prices, cache prices, explicit unavailable pricing),
+  `model-benchmark.ts` (GPQA Diamond / LCB variants, score 0-100 vs 1-based rank, sample count, window,
+  raw source ID), `model-record.ts` (stable `<providerId>/<modelId>` key, nested validation, no duplicate
+  benchmarks), `model-sort.ts` (all 9 sort keys + defaults `gpqaRank` asc / `gpqa`), and
+  `source-status.ts` (per-source health + overview state for partial/stale UI).
+- **Rules encoded:** missing = `null` (never `0`); a published `0` stays `0`; free means every known
+  in/out price is zero; a model with no benchmark has no array entry; score and rank are independent.
+- **Tests:** `tests/unit/domain.test.ts` — 23 tests / 95 assertions, network-free.
 
 ### Phase 3 — Data adapters
 `src/utils/fetch-json.ts` (timeout+AbortController, no secrets in errors) with retry/backoff + `Retry-After` at adapter level.
