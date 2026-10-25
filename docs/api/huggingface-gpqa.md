@@ -96,6 +96,10 @@ type GpqaLeaderboardEntry = {
 
 ## Mapping validation (2026-10-25)
 
+Seeded mapping strings are drift-checked live by `bun run validate:mappings`
+(scripts/validate-mappings.ts, Adjustment 18). Mapping lookup is exact-first
+with a casefolded fallback that only applies when the folded key is unique.
+
 - The KNOWLEDGE_04.md candidate table was checked against the live Diamond
   subset: **zero** of its `gpqaModelId` strings appear verbatim among the 25
   live `modelId`s. Live ids carry HF org prefixes (e.g. `moonshotai/Kimi-K2.6`,

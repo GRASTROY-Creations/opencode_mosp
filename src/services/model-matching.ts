@@ -6,7 +6,8 @@
  * 2. exact model ID (`modelId`);
  * 3. exact canonical ID;
  * 4. reviewed aliases;
- * 5. reviewed benchmark mappings (source id -> registry id, per benchmark);
+ * 5. reviewed benchmark mappings (source id -> registry id, per benchmark; exact
+ *    string first, casefolded only when uniquely resolvable);
  * 6. conservative normalized model/canonical IDs.
  *
  * A strategy that resolves to more than one model is ambiguous and recorded as
@@ -291,7 +292,7 @@ function fh_resolveModel(
   p_sourceModelId: string,
   p_index: ModelIndex,
   p_aliases: readonly ModelAlias[],
-  p_mappingIndex: ReadonlyMap<string, BenchmarkMapping>,
+  p_mappingIndex: MappingIndex,
 ): MatchResolution {
   const vl_exactId = p_index.byId.get(p_sourceModelId);
 
@@ -323,7 +324,7 @@ function fh_resolveModel(
     };
   }
 
-  const vl_mapping = p_mappingIndex.get(`${p_benchmarkId} ${p_sourceModelId}`);
+  const vl_mapping = fh_lookupMapping(p_mappingIndex, p_benchmarkId, p_sourceModelId);
 
   if (vl_mapping !== undefined) {
     const vl_targets = p_index.byId.get(vl_mapping.opencodeModelId) ?? [];
@@ -359,30 +360,75 @@ function fh_resolution(
   };
 }
 
-function fh_indexMappings(
-  p_mappings: readonly BenchmarkMapping[],
-): ReadonlyMap<string, BenchmarkMapping> {
-  const vl_index = new Map<string, BenchmarkMapping>();
-  const vl_ambiguous = new Set<string>();
+/**
+ * Mapping lookup index (Adjustment 18): exact `benchmark sourceId` keys win;
+ * casefolded keys act as a fallback only when they resolve to a single distinct
+ * source string. Conflicting entries are dropped rather than guessed.
+ */
+interface MappingIndex {
+  readonly exact: ReadonlyMap<string, BenchmarkMapping>;
+  readonly folded: ReadonlyMap<string, BenchmarkMapping>;
+}
+
+function fh_indexMappings(p_mappings: readonly BenchmarkMapping[]): MappingIndex {
+  const vl_exact = new Map<string, BenchmarkMapping>();
+  const vl_folded = new Map<string, BenchmarkMapping>();
+  const vl_exactAmbiguous = new Set<string>();
+  const vl_foldedAmbiguous = new Set<string>();
 
   for (const vl_mapping of p_mappings) {
-    const vl_key = `${vl_mapping.benchmarkId} ${vl_mapping.sourceModelId}`;
+    const vl_exactKey = `${vl_mapping.benchmarkId} ${vl_mapping.sourceModelId}`;
+    const vl_foldedKey = `${vl_mapping.benchmarkId} ${vl_mapping.sourceModelId.toLowerCase()}`;
 
-    if (vl_index.has(vl_key)) {
-      vl_ambiguous.add(vl_key);
+    if (vl_exact.has(vl_exactKey)) {
+      // Two reviewed entries claim the same benchmark + source string. Drop the
+      // key from both views: ambiguous reviewed data is worse than none.
+      vl_exactAmbiguous.add(vl_exactKey);
+      vl_foldedAmbiguous.add(vl_foldedKey);
       continue;
     }
 
-    vl_index.set(vl_key, vl_mapping);
+    vl_exact.set(vl_exactKey, vl_mapping);
+
+    const vl_foldedExisting = vl_folded.get(vl_foldedKey);
+
+    if (
+      vl_foldedExisting !== undefined &&
+      vl_foldedExisting.sourceModelId !== vl_mapping.sourceModelId
+    ) {
+      // Distinct source strings that collide once casefolded make the fold
+      // lookup ambiguous; exact matches remain usable.
+      vl_foldedAmbiguous.add(vl_foldedKey);
+    } else if (vl_foldedExisting === undefined) {
+      vl_folded.set(vl_foldedKey, vl_mapping);
+    }
   }
 
-  for (const vl_key of vl_ambiguous) {
+  for (const vl_key of vl_exactAmbiguous) {
     // Ambiguous reviewed data is worse than none: it would attach a score to
     // the wrong model. Drop every entry for that key instead of guessing.
-    vl_index.delete(vl_key);
+    vl_exact.delete(vl_key);
   }
 
-  return vl_index;
+  for (const vl_key of vl_foldedAmbiguous) {
+    vl_folded.delete(vl_key);
+  }
+
+  return { exact: vl_exact, folded: vl_folded };
+}
+
+function fh_lookupMapping(
+  p_index: MappingIndex,
+  p_benchmarkId: BenchmarkId,
+  p_sourceModelId: string,
+): BenchmarkMapping | undefined {
+  const vl_exact = p_index.exact.get(`${p_benchmarkId} ${p_sourceModelId}`);
+
+  if (vl_exact !== undefined) {
+    return vl_exact;
+  }
+
+  return p_index.folded.get(`${p_benchmarkId} ${p_sourceModelId.toLowerCase()}`);
 }
 
 function fh_matchTypeForResolution(p_resolution: MatchResolution): BenchmarkMatchType {

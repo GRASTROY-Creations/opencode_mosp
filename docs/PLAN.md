@@ -426,6 +426,38 @@ gathered directly from opencode itself instead; also lets enhance the tests and 
   `tests/fixtures/README.md`.
 - Verified: `bun run check` green — 168 tests / 577 assertions, 0 fail.
 
+### Adjustment 18 — casefold mapping lookup + live drift validator (owner request, 2026-10-25)
+
+Owner answers to the plan questions (verbatim): scope = "Seeds + validator script
+(Recommended)"; matching policy = "Casefold + uniqueness".
+
+- Validation matrix over the local JSONs (plugin cache + `/tmp/opencode/modelsdev.json`
+  + live probes): **no attachable mapping pairs exist beyond the three seeded rows** —
+  the pasted external analysis blamed case sensitivity, but the seeds already used
+  exact live strings; the real blocker is registry-side absence (its provider-scoped
+  ids like `openai/gpt-4o` do not exist in the `opencode/*` catalog) plus stale
+  LiveCodeBench strings (live: `GPT-4O-2024-08-06`, not `-05-13`;
+  `DeepSeek-R1-0528`, not plain `DeepSeek-R1`).
+- Mapping engine (`src/services/model-matching.ts`): `MappingIndex` now holds an
+  exact map and a casefolded map; lookup tries the exact source string first and
+  falls back to the casefolded key only when it resolves to a single distinct
+  source; colliding entries (casefolded duplicates or identical keys) are dropped
+  as ambiguous instead of guessed. Seeds unchanged.
+- New `scripts/validate-mappings.ts` + `bun run validate:mappings`: fetches the
+  live GPQA Diamond rows and LiveCodeBench `model_repr` list, checks every seeded
+  mapping's source string and (best-effort, via `opencode api`) its registry id;
+  prints PASS/DRIFT per entry with a summary line and exits non-zero on drift.
+  Network-required by design; NOT part of `bun run check`.
+- Tests: +3 (casefolded attach, exact-preferred with ambiguous fold, duplicate-key
+  drop). Docs: `data-flow.md`, `huggingface-gpqa.md`, `livecodebench.md`,
+  `development.md` updated.
+- Re-verified: `bun run check` green — **171 tests / 586 assertions**, 0 fail.
+- The validator's first live run immediately caught a real bug: it fetched
+  `k_gpqaLeaderboardUrl` (the human-facing provenance page) instead of the API
+  endpoint and reported the GPQA source unavailable. Fixed to use
+  `f_buildHuggingFaceLeaderboardUrl(k_gpqaDatasetId)`; the adapter itself was
+  always correct. Final smoke: **PASS 3/3, catalog:ok**.
+
 ### Phase 7 — Testing, security, CI
 Unit suite (normalization, aliases, price units incl. no double-scaling, score→rank, sort directions/ties/missing,
 filters, TTL, malformed/timeout/HTTP errors) + integration scenarios with mocked HTTP & committed fixtures (§14.2 list)

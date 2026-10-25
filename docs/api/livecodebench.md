@@ -76,6 +76,10 @@ Observed on 2026-10-24: 29,540 performance rows, 28 models, dates
 
 ## Matching
 
+Mapping lookup for `model_repr` strings is exact-first with a unique-casefold
+fallback; live drift of any reviewed mapping is checked by
+`bun run validate:mappings` (Adjustment 18).
+
 `model_repr` / `link` identify models by display name or HF repo
 (`DeepSeek-V3`, `Qwen/Qwen3-235B-A22B`, `o3__high`, …). Reasoning variants
 (`(High)`, `(Thinking)`, `_nothink`) are distinct rows. Matching to OpenCode

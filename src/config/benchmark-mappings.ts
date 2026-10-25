@@ -7,7 +7,9 @@ import type { BenchmarkId, BenchmarkMatchType } from "../domain/model-benchmark"
  * not already resolve through exact/canonical/alias matching. Entries must use
  * the EXACT identifier strings as they appear in the verified live payloads
  * (for GPQA that includes the HuggingFace org prefix, e.g.
- * `moonshotai/Kimi-K2.6`); no implicit normalization happens at match time.
+ * `moonshotai/Kimi-K2.6`). Matching tries the exact string first and applies a
+ * casefolded fallback only when the folded key resolves to a single distinct
+ * source (Adjustment 18) — no other normalization happens at match time.
  */
 export interface BenchmarkMapping {
   readonly benchmarkId: BenchmarkId;

@@ -25,6 +25,11 @@ bun test
 
 `bun run check` runs all three gates sequentially.
 
+`bun run validate:mappings` (scripts/validate-mappings.ts) re-checks the
+reviewed benchmark mappings against the live GPQA/LiveCodeBench sources and the
+location catalog (`--skip-catalog` to omit the latter). It needs network access
+and is intentionally NOT part of `bun run check` or CI.
+
 ## Version policy result (spec §5.2)
 
 At setup time (2026-10-24) the published stables were:

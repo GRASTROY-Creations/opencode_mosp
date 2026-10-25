@@ -45,9 +45,10 @@ usable.
 Benchmark rows are matched independently, in this order: exact
 `<providerId>/<modelId>` key, exact `modelId`, exact `canonicalId`, reviewed
 alias, reviewed benchmark mapping (`src/config/benchmark-mappings.ts`, exact
-source-ID lookup per benchmark), then conservative normalization (trim,
-lowercase, `_` → `-` only). Provider prefixes, version suffixes, and
-punctuation are not stripped automatically.
+source-ID first, then a casefolded fallback that only applies when the folded
+key resolves to a single distinct source — collisions drop both entries), then
+conservative normalization (trim, lowercase, `_` → `-` only). Provider prefixes,
+version suffixes, and punctuation are not stripped automatically.
 
 - A strategy that resolves to more than one model is recorded as `ambiguous`;
   matching stops there and never falls through to a looser strategy.
@@ -68,6 +69,10 @@ punctuation are not stripped automatically.
   kind (`alias`, `version_proxy`, `family_proxy`); legacy strategies attach as
   `exact`, reviewed aliases as `alias`. `version_proxy`/`family_proxy` cells
   render with a `~` prefix and are never presented as the model's own score.
+- `bun run validate:mappings` (`scripts/validate-mappings.ts`) re-fetches the
+  live GPQA/LiveCodeBench sources (plus the location catalog unless
+  `--skip-catalog`) and exits non-zero when a seeded mapping's live strings
+  drift. Network-required; deliberately not part of `bun run check`.
 
 ## Ranking and filtering
 

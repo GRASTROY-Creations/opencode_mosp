@@ -348,3 +348,108 @@ describe("seeded production mappings (defaults)", () => {
     expect(vl_qwen?.benchmarks[0]?.matchType).toBe("family_proxy");
   });
 });
+
+describe("casefolded mapping lookup", () => {
+  const k_foldMappings: readonly BenchmarkMapping[] = [
+    {
+      benchmarkId: "gpqa",
+      sourceModelId: "Kimi-K2.6",
+      opencodeModelId: "test/model-a",
+      matchType: "alias",
+      reason: "test",
+    },
+  ];
+
+  test("casefolded fallback attaches when the exact string misses", () => {
+    const vl_result = f_matchBenchmarkRecords(
+      [f_createTestModel({ id: "test/model-a" })],
+      [f_createTestBenchmark("gpqa", 90.5, { sourceModelId: "kimi-k2.6" })],
+      [],
+      k_foldMappings,
+    );
+
+    expect(vl_result.matches).toHaveLength(1);
+    expect(vl_result.matches[0]?.strategy).toBe("mapping");
+    expect(vl_result.matches[0]?.matchType).toBe("alias");
+  });
+
+  test("exact entries win; an ambiguous casefold key resolves nothing", () => {
+    const vl_mappings: readonly BenchmarkMapping[] = [
+      {
+        benchmarkId: "gpqa",
+        sourceModelId: "Foo",
+        opencodeModelId: "test/model-a",
+        matchType: "alias",
+        reason: "test",
+      },
+      {
+        benchmarkId: "gpqa",
+        sourceModelId: "foo",
+        opencodeModelId: "test/model-b",
+        matchType: "family_proxy",
+        reason: "test",
+      },
+    ];
+    const vl_models = [
+      f_createTestModel({ id: "test/model-a" }),
+      f_createTestModel({ id: "test/model-b" }),
+    ];
+
+    const vl_upper = f_matchBenchmarkRecords(
+      vl_models,
+      [f_createTestBenchmark("gpqa", 90, { sourceModelId: "Foo" })],
+      [],
+      vl_mappings,
+    );
+    expect(vl_upper.matches[0]?.modelId).toBe("test/model-a");
+
+    const vl_lower = f_matchBenchmarkRecords(
+      vl_models,
+      [f_createTestBenchmark("gpqa", 90, { sourceModelId: "foo" })],
+      [],
+      vl_mappings,
+    );
+    expect(vl_lower.matches[0]?.modelId).toBe("test/model-b");
+
+    const vl_other = f_matchBenchmarkRecords(
+      vl_models,
+      [f_createTestBenchmark("gpqa", 90, { sourceModelId: "FOO" })],
+      [],
+      vl_mappings,
+    );
+    expect(vl_other.matches).toHaveLength(0);
+    expect(vl_other.unmatched[0]?.reason).toBe("no-match");
+  });
+
+  test("duplicate identical sources drop from both views", () => {
+    const vl_mappings: readonly BenchmarkMapping[] = [
+      {
+        benchmarkId: "gpqa",
+        sourceModelId: "Dup",
+        opencodeModelId: "test/model-a",
+        matchType: "alias",
+        reason: "test",
+      },
+      {
+        benchmarkId: "gpqa",
+        sourceModelId: "Dup",
+        opencodeModelId: "test/model-b",
+        matchType: "alias",
+        reason: "test",
+      },
+    ];
+
+    const vl_result = f_matchBenchmarkRecords(
+      [
+        f_createTestModel({ id: "test/model-a" }),
+        f_createTestModel({ id: "test/model-b" }),
+      ],
+      [f_createTestBenchmark("gpqa", 90, { sourceModelId: "Dup" })],
+      [],
+      vl_mappings,
+    );
+
+    expect(vl_result.matches).toHaveLength(0);
+    expect(vl_result.unmatched[0]?.reason).toBe("no-match");
+  });
+});
