@@ -104,6 +104,12 @@ type GpqaLeaderboardEntry = {
 - The candidate doc also contains a machine-generation artifact
   ("Написание текста") — same suspect provenance as the discarded
   KNOWLEDGE_01 draft.
-- `k_benchmarkMappings` stays empty until the owner confirms real identities;
-  org-prefix/space normalization alone is speculative and NOT allowed as a
-  reviewed mapping.
+- The owner confirmed real identities on 2026-10-25, so
+  `src/config/benchmark-mappings.ts` is now seeded with exactly three reviewed
+  entries using the verbatim live strings (fixture
+  `tests/fixtures/hf-gpqa-kimi-qwen.sample.json`):
+  `moonshotai/Kimi-K2.6` (value 90.5, HF rank 12) → `opencode/kimi-k2.6` alias;
+  `moonshotai/Kimi-K2.5` (87.6, HF rank 28) → `opencode/kimi-k2.5` alias;
+  `Qwen/Qwen3.5-397B-A17B` (88.4, HF rank 20) → `opencode/qwen3.5-plus`
+  family_proxy (renders `~` in the table). HF ranks are still never reused.
+  All other live rows have no confirmed catalog counterpart and stay unmatched.

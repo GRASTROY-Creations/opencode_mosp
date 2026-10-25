@@ -14,7 +14,7 @@ models.dev api.json ┘
 
 | Source | Adapter | Output |
 |---|---|---|
-| Local model registry (`context.model.list()` / `context.data.location.model.list()`) | `src/providers/opencode-models.ts` (+ `opencode-pricing.ts`) | `ModelRecord[]` with `source: "opencode"`, no benchmarks |
+| Local model registry (`context.model.list()` / `context.data.location.model.list()`) | `src/providers/opencode-models.ts` (+ `opencode-pricing.ts`) | `ModelRecord[]` with `source: "opencode"`, no benchmarks — **host-first** on every panel mount (Adjustment 17); the cached entry is the fallback |
 | HF GPQA Diamond | `src/providers/huggingface-gpqa.ts` | `ModelBenchmark[]` (`gpqa`, `gpqa_diamond`) |
 | LiveCodeBench generation snapshot | `src/providers/livecodebench.ts` | `ModelBenchmark[]` (`livecodebench`, `generation`) |
 | models.dev provider catalog (`opencode` provider) | `src/providers/models-dev.ts` | `ModelsDevCrosswalk` — cached bridge for future mappings; **not displayed** (registry stays authoritative) |
@@ -55,12 +55,15 @@ punctuation are not stripped automatically.
   absent (`mapping-target-missing`), a row without a source ID, and a duplicate
   benchmark for a model are all recorded as unmatched.
 - Existing benchmark rows are never overwritten.
-- `src/config/model-aliases.ts` and `src/config/benchmark-mappings.ts` are the
-  reviewed registries. Both are intentionally empty for the 2026-10-25 catalog:
-  no benchmark row corresponds to a current (largely anonymized) registry
-  model, and the KNOWLEDGE_04.md candidate table attached ZERO rows when
-  validated against the live sources. The service accepts injected registries
-  for tests and future reviewed mappings.
+- `src/config/model-aliases.ts` stays empty (no legacy alias rows).
+  `src/config/benchmark-mappings.ts` was seeded on 2026-10-25 (Adjustment 17)
+  with the three owner-confirmed GPQA rows — `moonshotai/Kimi-K2.6` →
+  `opencode/kimi-k2.6` (alias), `moonshotai/Kimi-K2.5` → `opencode/kimi-k2.5`
+  (alias), `Qwen/Qwen3.5-397B-A17B` → `opencode/qwen3.5-plus` (family_proxy);
+  exact live source strings, org prefixes included. The KNOWLEDGE_04.md and
+  KNOWLEDGE_06.md candidate tables were validated against the live sources and
+  attached ZERO rows as written, so nothing else was adopted. The service
+  accepts injected registries for tests and future reviewed mappings.
 - Every attached row records a `matchType`: mapping entries carry their own
   kind (`alias`, `version_proxy`, `family_proxy`); legacy strategies attach as
   `exact`, reviewed aliases as `alias`. `version_proxy`/`family_proxy` cells

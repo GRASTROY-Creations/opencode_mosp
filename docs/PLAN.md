@@ -400,6 +400,32 @@ OpenTUI 0.6.8 slot-tree painting).
   README updated. Owner visual: status dialog shows a `models.dev` line after
   `/mosp update`.
 
+### Adjustment 17 — host-first catalog + seeded mappings (owner request, 2026-10-25)
+Owner (verbatim): "looks like currently al models in table are hardcoded, those should be
+gathered directly from opencode itself instead; also lets enhance the tests and test data;"
+(after the live catalog grew 16 → 82 enabled models).
+- Service: new `f_getModelOverviewFromHost` — the host location catalog (`list()`,
+  no sync/network) wins whenever it parses non-empty; otherwise the cached
+  `opencode-models` entry is the fallback with a `host-catalog-fallback` warning.
+  Benchmarks and the models.dev crosswalk stay cache-only; cache writes still
+  happen only through `/mosp update`.
+- Controller/UI: `loadFromCache` → `loadSnapshot` (host-first on every mount and
+  on `/mosp redraw`); shared `fh_providerNames()`; `fh_readHostCatalog()`.
+- Mappings seeded (owner-confirmed 2026-10-25): `moonshotai/Kimi-K2.6` →
+  `opencode/kimi-k2.6` (alias), `moonshotai/Kimi-K2.5` → `opencode/kimi-k2.5`
+  (alias), `Qwen/Qwen3.5-397B-A17B` → `opencode/qwen3.5-plus` (family_proxy,
+  renders `~`). Exact live strings incl. HF org prefixes; all other rows stay
+  unmatched.
+- Test data: `model-info.full.sample.json` (82 sanitized live models),
+  `hf-gpqa-kimi-qwen.sample.json` (3 live Diamond rows), `models-dev.sample.json`
+  regenerated (130 trimmed opencode entries + openai filtering proof); +5 tests
+  (4 host-first read cases, 1 seeded-defaults mapping case).
+- Docs updated: `docs/api/opencode-models.md` (host-first + 82-model re-probe),
+  `docs/api/huggingface-gpqa.md` (verified attaches), `docs/architecture/caching.md`
+  (mount reads), `docs/architecture/data-flow.md` (pipeline + seeded registries),
+  `tests/fixtures/README.md`.
+- Verified: `bun run check` green — 168 tests / 577 assertions, 0 fail.
+
 ### Phase 7 — Testing, security, CI
 Unit suite (normalization, aliases, price units incl. no double-scaling, score→rank, sort directions/ties/missing,
 filters, TTL, malformed/timeout/HTTP errors) + integration scenarios with mocked HTTP & committed fixtures (§14.2 list)

@@ -17,6 +17,12 @@ Two ways to obtain the same `ModelInfo` records:
 `/api/model` returns `{ location: { directory }, data: ModelInfo[] }`. The
 `location` query parameter is a deep object: `location[directory]`.
 
+Panel reads are host-first (Adjustment 17): `f_getModelOverviewFromHost` uses
+the synchronous `list()` read on every mount — no `.sync()`, no network — and
+falls back to the cached `opencode-models` entry when the host list is empty or
+unparsable (warning `host-catalog-fallback`). The cache is written only by
+`/mosp update`.
+
 ## Verified `ModelInfo` shape
 
 From `@opencode/client` 2.1.4 generated types and a live response
@@ -47,9 +53,10 @@ type ModelInfo = {
 
 Notes:
 
-- The list is **location/provider scoped**. In this environment it returned 16
-  models for the single authenticated provider `opencode`; a user with more
-  providers sees more. Never assume a global catalog.
+- The list is **location/provider scoped**. This environment returned 16 models on
+  2026-10-24 and 82 on 2026-10-25 (all provider `opencode`) after the owner
+  enabled more models; a user with more providers sees more. Never assume a
+  global catalog.
 - `id` equals `modelID` in observed data; the plugin's domain key is
   `` `${providerID}/${modelID}` ``.
 - `time.released` is milliseconds, not seconds.

@@ -178,6 +178,57 @@ export async function f_getModelOverview(
  * Refresh sources whose cache is missing, stale, or forced, then return the
  * merged snapshot. Failures preserve existing cache entries (last-known-good).
  */
+/**
+ * Host-first read (Adjustment 17): the live OpenCode location catalog wins when
+ * it parses and is non-empty; otherwise the cached model entry is used. The
+ * benchmark sources and the models.dev crosswalk stay cache-only, and this read
+ * never writes the cache.
+ */
+export async function f_getModelOverviewFromHost(
+  p_options: OverviewReadOptions & {
+    readonly hostModels: AdapterResult<readonly ModelRecord[]>;
+  },
+): Promise<ModelOverviewSnapshot> {
+  const vl_now = fh_resolveNow(p_options.now);
+  const vl_warnings: OverviewWarning[] = [];
+  let vl_models: SourceRead<readonly ModelRecord[]>;
+
+  if (p_options.hostModels.ok && p_options.hostModels.value.length > 0) {
+    vl_models = fh_successfulRead(
+      p_options.hostModels.value,
+      vl_now.toISOString(),
+      true,
+    );
+    vl_warnings.push(
+      ...fh_mapWarnings("opencode-models", p_options.hostModels.warnings),
+    );
+  } else {
+    vl_warnings.push({
+      source: "opencode-models",
+      code: "host-catalog-fallback",
+      message: p_options.hostModels.ok
+        ? "Host catalog returned no models; using cached snapshot"
+        : `Host catalog unavailable; using cached snapshot (${p_options.hostModels.error})`,
+    });
+    vl_models = await fh_readModels(p_options.cache, vl_now);
+  }
+
+  const [vl_gpqa, vl_liveCodeBench, vl_modelsDev] = await Promise.all([
+    fh_readBenchmarks(p_options.cache, "gpqa", vl_now),
+    fh_readBenchmarks(p_options.cache, "livecodebench", vl_now),
+    fh_readModelsDev(p_options.cache, vl_now),
+  ]);
+
+  return fh_assembleSnapshot(
+    vl_models,
+    vl_gpqa,
+    vl_liveCodeBench,
+    vl_modelsDev,
+    p_options.cache.key,
+    vl_warnings,
+  );
+}
+
 export function f_refreshModelOverview(
   p_options: OverviewRefreshOptions,
 ): Promise<ModelOverviewSnapshot> {

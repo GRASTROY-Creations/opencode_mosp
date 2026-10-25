@@ -14,10 +14,12 @@
  *   once at creation time. See `docs/architecture/ui-integration.md`.
  *
  * Data rules:
- * - Panel reads are cache-only (`f_getModelOverview`); no keystroke or toggle
- *   ever triggers a network request.
- * - Live fetching happens exclusively through `update` (`/mosp update` or the
- *   palette action); `/mosp redraw` only repaints from cache.
+ * - Panel reads are host-first (`f_getModelOverviewFromHost`): the live
+ *   OpenCode location catalog wins whenever it parses; the cached model entry
+ *   is the fallback. No keystroke or toggle ever triggers a network request.
+ * - Benchmarks and the models.dev crosswalk are cache-only; live fetching
+ *   happens exclusively through `update` (`/mosp update` or the palette
+ *   action); `/mosp redraw` re-reads the host catalog plus cache and repaints.
  * - Missing values stay `null`; formatting renders them as an em dash.
  */
 
@@ -37,7 +39,7 @@ import {
   type RankingMode,
   type SortDirection,
 } from "../domain/model-sort";
-import type { AdapterResult } from "../providers/adapter-result";
+import { f_adapterFail, type AdapterResult } from "../providers/adapter-result";
 import { f_fetchGpqaBenchmarks } from "../providers/huggingface-gpqa";
 import { f_fetchLiveCodeBench } from "../providers/livecodebench";
 import { f_fetchModelsDevCrosswalk, type ModelsDevCrosswalk } from "../providers/models-dev";
@@ -50,7 +52,7 @@ import {
 } from "../services/cache";
 import { f_filterModels, type ModelFilterOptions } from "../services/model-filter";
 import {
-  f_getModelOverview,
+  f_getModelOverviewFromHost,
   f_refreshModelOverview,
   f_resolveRequestTimeoutMs,
   type ModelOverviewSnapshot,
@@ -443,7 +445,7 @@ export interface OverviewController {
   readonly clearFilters: () => void;
   readonly toggleSort: (p_key: ModelSortKey) => void;
   readonly toggleCollapsed: () => void;
-  readonly loadFromCache: () => Promise<void>;
+  readonly loadSnapshot: () => Promise<void>;
   readonly refresh: (p_force: boolean) => Promise<ModelOverviewSnapshot | undefined>;
 }
 
@@ -642,6 +644,39 @@ export function f_createOverviewController(
     fh_pokeRender();
   }
 
+  /** Provider display names keyed by provider id, from the host catalog. */
+  function fh_providerNames(): Record<string, string> {
+    const vl_providerNames: Record<string, string> = {};
+
+    for (const vl_provider of p_context.data.location.provider.list(p_context.location) ?? []) {
+      const vl_id = vl_provider.id;
+      const vl_name = vl_provider.name;
+      if (typeof vl_id === "string" && vl_id.length > 0 && typeof vl_name === "string" && vl_name.length > 0) {
+        vl_providerNames[vl_id] = vl_name;
+      }
+    }
+
+    return vl_providerNames;
+  }
+
+  /**
+   * Host-first catalog read (Adjustment 17): the live location catalog without
+   * syncing. This is a local host read; it never touches the network directly.
+   */
+  function fh_readHostCatalog(): AdapterResult<readonly ModelRecord[]> {
+    try {
+      return f_parseOpencodeModels(
+        p_context.data.location.model.list(p_context.location) ?? [],
+        {
+          observedAt: new Date().toISOString(),
+          providerNames: fh_providerNames(),
+        },
+      );
+    } catch {
+      return f_adapterFail("host catalog read failed");
+    }
+  }
+
   async function fh_loadModels(
     p_loadContext: OverviewLoadContext,
   ): Promise<AdapterResult<readonly ModelRecord[]>> {
@@ -651,19 +686,13 @@ export function f_createOverviewController(
     } catch {
       // Keep the last catalog; parsing below still uses the current list snapshot.
     }
-    const vl_models = p_context.data.location.model.list(p_context.location) ?? [];
-    const vl_providerNames: Record<string, string> = {};
-    for (const vl_provider of p_context.data.location.provider.list(p_context.location) ?? []) {
-      const vl_id = vl_provider.id;
-      const vl_name = vl_provider.name;
-      if (typeof vl_id === "string" && vl_id.length > 0 && typeof vl_name === "string" && vl_name.length > 0) {
-        vl_providerNames[vl_id] = vl_name;
-      }
-    }
-    return f_parseOpencodeModels(vl_models, {
-      observedAt: p_loadContext.now.toISOString(),
-      providerNames: vl_providerNames,
-    });
+    return f_parseOpencodeModels(
+      p_context.data.location.model.list(p_context.location) ?? [],
+      {
+        observedAt: p_loadContext.now.toISOString(),
+        providerNames: fh_providerNames(),
+      },
+    );
   }
 
   async function fh_loadGpqa(
@@ -693,12 +722,17 @@ export function f_createOverviewController(
     });
   }
 
-  async function f_loadFromCache(): Promise<void> {
+  async function f_loadSnapshot(): Promise<void> {
     try {
-      vl_setSnapshot(await f_getModelOverview({ cache: vl_cache }));
+      vl_setSnapshot(
+        await f_getModelOverviewFromHost({
+          cache: vl_cache,
+          hostModels: fh_readHostCatalog(),
+        }),
+      );
       fh_pokeRender();
     } catch {
-      vl_setLastError("cache read failed");
+      vl_setLastError("snapshot read failed");
       fh_pokeRender();
     }
   }
@@ -724,7 +758,7 @@ export function f_createOverviewController(
       return vl_next;
     } catch {
       vl_setLastError("refresh failed unexpectedly");
-      await f_loadFromCache();
+      await f_loadSnapshot();
       return vl_snapshot();
     } finally {
       vl_setLoading(false);
@@ -752,7 +786,7 @@ export function f_createOverviewController(
     clearFilters: f_clearFilters,
     toggleSort: f_toggleSort,
     toggleCollapsed: f_toggleCollapsed,
-    loadFromCache: f_loadFromCache,
+    loadSnapshot: f_loadSnapshot,
     refresh: f_refresh,
   };
 }

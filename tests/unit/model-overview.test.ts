@@ -12,6 +12,7 @@ import {
 import { f_createMemoryCache, type OverviewCache } from "../../src/services/cache";
 import {
   f_getModelOverview,
+  f_getModelOverviewFromHost,
   f_getOverviewStatus,
   f_mergeModelSources,
   f_refreshModelOverview,
@@ -660,6 +661,90 @@ describe("f_refreshModelOverview", () => {
     expect(vl_models?.error).toBe("model refresh failed unexpectedly");
     expect(vl_models?.error).not.toContain("secret");
     expect(vl_snapshot.status.state).toBe("error");
+  });
+});
+
+describe("f_getModelOverviewFromHost", () => {
+  const k_hostModel: ModelRecord = f_createTestModel({
+    id: "opencode/kimi-k2.6",
+    providerId: "opencode",
+    modelId: "kimi-k2.6",
+    name: "Kimi K2.6",
+  });
+
+  test("host catalog wins and real mappings attach", async () => {
+    const vl_cache = f_createMemoryCache();
+    await fh_writeCache(vl_cache, "gpqa", [
+      f_createTestBenchmark("gpqa", 90.5, {
+        sourceModelId: "moonshotai/Kimi-K2.6",
+      }),
+    ]);
+    await fh_writeCache(vl_cache, "livecodebench", fh_createLiveCodeBenchRows());
+    await fh_writeCache(vl_cache, "models-dev", fh_createCrosswalk());
+
+    const vl_snapshot = await f_getModelOverviewFromHost({
+      cache: vl_cache,
+      now: f_now,
+      hostModels: f_adapterOk([k_hostModel]),
+    });
+
+    expect(vl_snapshot.models).toHaveLength(1);
+    expect(vl_snapshot.matches).toHaveLength(1);
+    expect(vl_snapshot.matches[0]?.strategy).toBe("mapping");
+    expect(vl_snapshot.matches[0]?.matchType).toBe("alias");
+    expect(vl_snapshot.warnings).toEqual([]);
+    const vl_modelsStatus = vl_snapshot.status.sources.find(
+      (p_source) => p_source.source === "opencode-models",
+    );
+    expect(vl_modelsStatus?.state).toBe("fresh");
+    expect(
+      vl_snapshot.models[0]?.benchmarks.find((p_b) => p_b.benchmarkId === "gpqa")
+        ?.matchType,
+    ).toBe("alias");
+  });
+
+  test("empty host list falls back to the cached snapshot with a warning", async () => {
+    const vl_cache = f_createMemoryCache();
+    await fh_seedReadyCache(vl_cache);
+
+    const vl_snapshot = await f_getModelOverviewFromHost({
+      cache: vl_cache,
+      now: f_now,
+      hostModels: f_adapterOk([]),
+    });
+
+    expect(vl_snapshot.models).toHaveLength(2);
+    expect(
+      vl_snapshot.warnings.some(
+        (p_warning) => p_warning.code === "host-catalog-fallback",
+      ),
+    ).toBe(true);
+  });
+
+  test("failed host read falls back to the cached snapshot", async () => {
+    const vl_cache = f_createMemoryCache();
+    await fh_seedReadyCache(vl_cache);
+
+    const vl_snapshot = await f_getModelOverviewFromHost({
+      cache: vl_cache,
+      now: f_now,
+      hostModels: f_adapterFail("boom"),
+    });
+
+    expect(vl_snapshot.models).toHaveLength(2);
+    expect(vl_snapshot.warnings[0]?.message).toContain("boom");
+  });
+
+  test("no cache plus host failure yields no models, never fabricating", async () => {
+    const vl_cache = f_createMemoryCache();
+
+    const vl_snapshot = await f_getModelOverviewFromHost({
+      cache: vl_cache,
+      now: f_now,
+      hostModels: f_adapterFail("boom"),
+    });
+
+    expect(vl_snapshot.models).toHaveLength(0);
   });
 });
 

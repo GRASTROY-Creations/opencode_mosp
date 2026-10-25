@@ -6,9 +6,12 @@ the reference for what is stored, where it lives, and how staleness is handled.
 
 ## Principles
 
-1. **No network I/O on panel open.** `f_getModelOverview` and
-   `f_getOverviewStatus` read the cache only. Live fetches happen exclusively
-   through `f_refreshModelOverview`.
+1. **No network I/O on panel open.** Mounts use `f_getModelOverviewFromHost`:
+   the host's in-memory location catalog wins whenever it parses, the
+   `opencode-models` cache entry is the fallback, and benchmark sources plus
+   the models.dev crosswalk stay cache-only. `f_getModelOverview` and
+   `f_getOverviewStatus` read the cache alone. Live fetches happen exclusively
+   through `f_refreshModelOverview` (`/mosp update`).
 2. **Per-source isolation.** Each source is read, refreshed, and marked stale
    independently. One failure never discards another source's rows.
 3. **Last-known-good wins.** A failed refresh keeps the previous cached entry
@@ -23,7 +26,7 @@ the reference for what is stored, where it lives, and how staleness is handled.
 
 | Source key | Payload | Written by | Default TTL |
 |---|---|---|---|
-| `opencode-models` | `ModelRecord[]` from the registry adapter | model refresh | 1 hour |
+| `opencode-models` | `ModelRecord[]` from the registry adapter (fallback for host-first reads) | model refresh | 1 hour |
 | `gpqa` | `ModelBenchmark[]` (GPQA Diamond) | GPQA refresh | 6 hours |
 | `livecodebench` | `ModelBenchmark[]` (generation window) | LiveCodeBench refresh | 6 hours |
 | `models-dev` | `ModelsDevCrosswalk` (`opencode/<modelId>` → name/family/release date) | models.dev refresh | 6 hours |

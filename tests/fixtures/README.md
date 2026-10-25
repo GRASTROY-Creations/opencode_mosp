@@ -9,7 +9,9 @@ guessed ones.
 | `model-info.sample.json` | `GET /api/model` on the local OpenCode service (v2.1.4) | 2026-10-24 |
 | `hf-gpqa-leaderboard.sample.json` | `GET https://huggingface.co/api/datasets/Idavidrein/gpqa/leaderboard` | 2026-10-24 |
 | `livecodebench.sample.json` | `GET https://livecodebench.github.io/performances_generation.json` | 2026-10-24 |
-| `models-dev.sample.json` | `GET https://models.dev/api.json` (opencode provider slice + one openai model as filtering proof) | 2026-10-25 |
+| `models-dev.sample.json` | `GET https://models.dev/api.json` (opencode provider: 130 models trimmed to {id,name,family,release_date}; one openai model as filtering proof) | 2026-10-25 |
+| `model-info.full.sample.json` | `GET /api/model` on the local OpenCode service (v2.1.4) — full 82-model live catalog, sanitized | 2026-10-25 |
+| `hf-gpqa-kimi-qwen.sample.json` | `GET https://huggingface.co/api/datasets/Idavidrein/gpqa/leaderboard` — the 3 live Diamond rows matching the seeded `k_benchmarkMappings` | 2026-10-25 |
 
 ## Sanitization
 

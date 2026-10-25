@@ -20,11 +20,13 @@ import {
  * Model Overview — TUI entrypoint (Phase 6).
  *
  * The panel is a pure renderer over `src/ui/panel-controller.ts`:
- * - data comes from the cache only (`f_getModelOverview`); opening, toggling,
- *   sorting, and filtering never trigger a network request;
+ * - model data is read host-first: the live OpenCode location catalog wins
+ *   whenever it parses, with the cache as fallback; benchmarks and the
+ *   models.dev crosswalk come from the cache only; opening, toggling, sorting,
+ *   and filtering never trigger a network request;
  * - `update` (palette or `/mosp update`) is the single explicit path that
- *   talks to sources, with per-source failure isolation; `/mosp redraw` only
- *   re-reads the cache and repaints the view;
+ *   talks to external sources, with per-source failure isolation; `/mosp
+ *   redraw` re-reads host + cache and repaints the view;
  * - missing values render as an em dash and are never invented.
  *
  * Painting model (verified on opencode 2.1.4 / OpenTUI 0.6.8, 2026-10-25):
@@ -233,7 +235,7 @@ function SidebarStatus(props: { readonly controller: OverviewController }) {
 
 function f_setup(context: Plugin.Context): () => void {
   const controller = f_createOverviewController(context, k_panelName);
-  void controller.loadFromCache();
+  void controller.loadSnapshot();
 
   function f_togglePanel(): void {
     const vl_current = context.ui.panel.current();
@@ -301,7 +303,7 @@ function f_setup(context: Plugin.Context): () => void {
         void f_updateDataWithToast();
         return;
       case "redraw":
-        void controller.loadFromCache();
+        void controller.loadSnapshot();
         context.ui.toast.show({
           title: "Model overview",
           message: "View redrawn from cache.",
@@ -361,7 +363,7 @@ function f_setup(context: Plugin.Context): () => void {
         group: "Model overview",
         palette: true,
         run: () => {
-          void controller.loadFromCache();
+          void controller.loadSnapshot();
         },
       },
       {

@@ -311,3 +311,40 @@ describe("reviewed benchmark mappings", () => {
     expect(vl_result.matches[0]?.matchType).toBe("version_proxy");
   });
 });
+
+describe("seeded production mappings (defaults)", () => {
+  test("attach the three owner-verified GPQA rows without explicit inputs", () => {
+    const vl_models = [
+      f_createTestModel({
+        id: "opencode/kimi-k2.6",
+        providerId: "opencode",
+        modelId: "kimi-k2.6",
+      }),
+      f_createTestModel({
+        id: "opencode/kimi-k2.5",
+        providerId: "opencode",
+        modelId: "kimi-k2.5",
+      }),
+      f_createTestModel({
+        id: "opencode/qwen3.5-plus",
+        providerId: "opencode",
+        modelId: "qwen3.5-plus",
+      }),
+    ];
+    const vl_benchmarks = [
+      f_createTestBenchmark("gpqa", 90.5, { sourceModelId: "moonshotai/Kimi-K2.6" }),
+      f_createTestBenchmark("gpqa", 87.6, { sourceModelId: "moonshotai/Kimi-K2.5" }),
+      f_createTestBenchmark("gpqa", 88.4, { sourceModelId: "Qwen/Qwen3.5-397B-A17B" }),
+    ];
+
+    const vl_result = f_matchBenchmarkRecords(vl_models, vl_benchmarks);
+
+    expect(vl_result.matches).toHaveLength(3);
+    expect(vl_result.matches.every((p_match) => p_match.strategy === "mapping")).toBe(true);
+    expect(vl_result.matches[2]?.matchType).toBe("family_proxy");
+    const vl_qwen = vl_result.models.find(
+      (p_model) => p_model.id === "opencode/qwen3.5-plus",
+    );
+    expect(vl_qwen?.benchmarks[0]?.matchType).toBe("family_proxy");
+  });
+});
