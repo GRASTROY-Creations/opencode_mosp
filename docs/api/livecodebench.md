@@ -79,7 +79,15 @@ Observed on 2026-10-24: 29,540 performance rows, 28 models, dates
 `model_repr` / `link` identify models by display name or HF repo
 (`DeepSeek-V3`, `Qwen/Qwen3-235B-A22B`, `o3__high`, …). Reasoning variants
 (`(High)`, `(Thinking)`, `_nothink`) are distinct rows. Matching to OpenCode
-`provider/model` IDs needs the reviewed alias table; unresolved → `null`.
+`provider/model` IDs needs the reviewed alias/mapping tables; unresolved → `null`.
+
+### Mapping validation (2026-10-25)
+
+- The KNOWLEDGE_04.md candidate table was checked against the live payload:
+  **zero** of its `lcbModelId` strings appear among the 28 live `model_repr`s
+  (`DeepSeek-V3`, `O4-Mini (High)`, `Claude-Sonnet-4`, …). The candidate doc
+  carries a machine-generation artifact ("Написание текста") and is not trusted.
+- `k_benchmarkMappings` stays empty until the owner confirms real identities.
 
 ## Adapter (implemented, Phase 3)
 

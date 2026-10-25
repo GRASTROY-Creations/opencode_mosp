@@ -302,6 +302,80 @@ tunable), schema version, atomic writes in a user cache dir, in-flight dedup, la
   `docs/architecture/ui-integration.md` mouse/behaviour sections and checklist
   updated.
   Re-verified: `bun run check` green — **153 tests / 508 assertions**.
+- **Adjustment 6 (owner request, 2026-10-24):** clicking a column header updated the
+  `▲/▼` indicator but rows did not reorder. Diagnosis: `@opentui/solid` 0.6.8's move
+  path is unreliable inside the panel's scrollbox tree — `_insertNode` silently
+  degrades to append when the anchor lookup fails (`anchorIndex === -1`), and
+  `getNextSibling`'s `_getParentNode` re-parents nodes to the `scrollbox` itself,
+  so keyed `<For>` reorders can keep rendering the old order. Fix: model rows now
+  render with `<Index>` (index-keyed slots re-render in place; no node moves),
+  while the static column-header `<For>` is unchanged. Verified: `bun run check`
+  green — **153 tests / 508 assertions**;
+  `docs/architecture/ui-integration.md` rendering note added; owner visual gate
+  pending.
+
+### Adjustment 7 — slash command renamed to `/mosp` (owner request, 2026-10-24)
+- The user-facing slash trigger is now **`/mosp`**; the old `/model-overview` name and the `/mo` alias were removed.
+- Only user-facing strings and the slash registration changed. Unchanged internals: plugin id, host panel name
+  `model-overview`, storage keys `model-overview.*`, command ids `model_overview.*`, palette titles, and the
+  `.opencode/plugins/model-overview/` dev-loader directory.
+- Docs updated (`docs/architecture/ui-integration.md` command table, behaviour text, checklist). Historical mentions
+  in this plan and the original knowledge doc (`docs/KNOWLEDGE_03.md`) remain as history; `/mosp` supersedes them.
+- Re-verified: `bun run check` green after the rename.
+
+### Adjustment 8 — ranking chips removed, row sorting fixed, Ctx sortable (owner request, 2026-10-24)
+
+- The `[GPQA]`/`[LCB]` ranking chips were removed; rows sort exclusively through
+  the column titles. The sidebar leader defaults to GPQA and follows a benchmark
+  only when a benchmark column is the active sort.
+- Row sorting was broken on screen even though the data reordered: keyed
+  `<For>`/`<Index>` moves are unreliable in the panel's scrollbox tree
+  (`@opentui/solid` 0.6.8 `_insertNode` append fallback; `_getParentNode`
+  scrollbox re-parenting). Rows now remount per derivation via
+  `<Show when={vl_rows()} keyed>` + `<For>`.
+- `Ctx` (context window) is now a sort key (`contextWindow`, numeric, descending
+  default, nulls last); `/mosp sort ctx` works.
+- Docs updated (`ui-integration.md` rendering note, chip changes, Ctx sorting);
+  Re-verified: `bun run check` green — 150 tests / 507 assertions.
+
+### Adjustments 9–15 — reactivity discovery arc (owner reports, 2026-10-24/25)
+
+Recorded compactly (docs were deferred during rapid owner iteration):
+
+- **9 — dual-runtime reactivity refactor:** the host binary embeds its own
+  Solid/OpenTUI runtime, so controller memos could not track host-created
+  stores. All render-relevant state moved to controller-owned signals; host
+  stores became persistence-only mirrors (write-through, one-time read).
+- **10 — layout fixes:** responsive columns (hide Ctx under panel width 92,
+  Provider under 76), price columns widened to 10 so `Out $/M ▲` stays on one
+  line, column-header click sorting via press-and-release.
+- **11 — search removal:** search bar, controller state, the
+  `OPENCODE_MOSP_SEARCH` env flag, and the service-level `searchText` filter
+  removed end-to-end (owner request).
+- **12 — benchmark-mappings infrastructure:** `src/config/benchmark-mappings.ts`
+  (reviewed `{benchmarkId, sourceModelId, opencodeModelId, matchType, reason}`
+  entries), matcher stage after alias/before normalization, `matchType` domain
+  field on `ModelBenchmark`, `~` prefix for proxies in table cells. The
+  KNOWLEDGE_04 candidate table validated against the live registry + GPQA
+  Diamond + LCB sources attached ZERO rows; `k_benchmarkMappings` stays `[]`
+  pending owner-verified `registryId = Real Model Name` pairs.
+- **13 — command split:** `/mosp update` = network refresh, `/mosp redraw` =
+  cache repaint; bare `refresh` invalid. A `ReactiveText` probe component
+  proved imperative text updates execute but never paint.
+- **14 — remount-as-design:** probe logs confirmed mounted slot subtrees never
+  repaint on plugin-side mutations (`requestRender`/`invalidateIntrinsicSize`
+  ineffective). The controller's `fh_pokeRender` now coalesces mutations per
+  microtask into `panel.close()` + `panel.open()`; hover visuals dropped; the
+  panel renders plain mount-time text.
+- **15 — cleanup (2026-10-25):** `[redraw]` chip + spacer removed from the
+  toolbar (row is `[free]` only; `/mosp redraw` and the palette entry remain);
+  all diagnostics deleted (`fh_diagLog`, `k_diagLogPath`, `node:fs` import,
+  setup/toggleSort/derive logs, `· adj8diag` title marker); this plan and
+  `ui-integration.md` updated for the verified painting model.
+
+Gate throughout: `bun run check` — final state 156 tests / 522 assertions,
+0 fail. Upstream bug report drafted for the owner to file (opencode 2.1.4 /
+OpenTUI 0.6.8 slot-tree painting).
 
 ### Phase 7 — Testing, security, CI
 Unit suite (normalization, aliases, price units incl. no double-scaling, score→rank, sort directions/ties/missing,

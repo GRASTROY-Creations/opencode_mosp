@@ -1,5 +1,5 @@
 /**
- * Search and table filters over normalized records.
+ * Table filters over normalized records.
  *
  * Filters are composable and never mutate the catalog. A missing benchmark
  * result is not a score: presence checks require a non-null `score`, so a
@@ -24,8 +24,6 @@ export interface BenchmarkPresenceFilter {
 
 /** Optional filters; an omitted/empty option means "no restriction". */
 export interface ModelFilterOptions {
-  /** Case-insensitive substring over name, provider, and identifiers. */
-  readonly searchText?: string;
   /** Exact provider IDs; empty or omitted shows every provider. */
   readonly providerIds?: readonly string[];
   /** Require a result (or its absence) for one benchmark or for any result. */
@@ -34,24 +32,16 @@ export interface ModelFilterOptions {
   readonly freeOnly?: boolean;
 }
 
-/** Apply search, provider, benchmark-presence, and free-model filters. */
+/** Apply provider, benchmark-presence, and free-model filters. */
 export function f_filterModels(
   p_models: readonly ModelRecord[],
   p_options: ModelFilterOptions = {},
 ): readonly ModelRecord[] {
-  const vl_search = fh_normalizeSearch(p_options.searchText ?? "");
   const vl_providerIds = new Set(p_options.providerIds ?? []);
   const vl_presence = p_options.benchmarkPresence;
   const vl_freeOnly = p_options.freeOnly === true;
 
   return p_models.filter((p_model) => {
-    if (
-      vl_search.length > 0 &&
-      !fh_matchesSearch(p_model, vl_search)
-    ) {
-      return false;
-    }
-
     if (
       vl_providerIds.size > 0 &&
       !vl_providerIds.has(p_model.providerId)
@@ -69,23 +59,6 @@ export function f_filterModels(
 
     return true;
   });
-}
-
-function fh_normalizeSearch(p_searchText: string): string {
-  return p_searchText.trim().toLowerCase();
-}
-
-function fh_matchesSearch(p_model: ModelRecord, p_search: string): boolean {
-  const vl_fields = [
-    p_model.name,
-    p_model.providerName,
-    p_model.providerId,
-    p_model.modelId,
-    p_model.id,
-    p_model.canonicalId ?? "",
-  ];
-
-  return vl_fields.some((p_field) => p_field.toLowerCase().includes(p_search));
 }
 
 function fh_matchesPresence(

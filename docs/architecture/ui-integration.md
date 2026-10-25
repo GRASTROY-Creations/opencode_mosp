@@ -36,7 +36,8 @@ export default Plugin.define({
 ## Architecture split (Phase 6)
 
 - `src/ui/panel-controller.ts` — all state and pure logic, renderer-agnostic:
-  preferences/search/filter stores, snapshot signals, derived row memo
+  preference/filter stores (persistence mirrors) plus controller-owned signals,
+  snapshot signals, derived row memo
   (filter → sort), ranking-leader memo, cache reads, refresh flow, command
   parsing, and all display strings. Imported host types are **type-only**, so
   the module is unit-testable without the TUI runtime.
@@ -129,7 +130,7 @@ Registered commands (no binds):
 | `model_overview.toggle` | open/close the panel (suggested in palette) |
 | `model_overview.status` | dialog with snapshot + per-source freshness |
 | `model_overview.refresh` | `f_refreshModelOverview` with force, toast summary |
-| `model_overview.command` | slash `/model-overview` (alias `/mo`) with raw args |
+| `model_overview.command` | slash `/mosp` with raw args |
 
 ## Storage (`context.storage`)
 
@@ -143,7 +144,6 @@ Keys used by the panel (preferences are never mixed with cached data):
 | Key | Kind | Shape |
 |---|---|---|
 | `model-overview.preferences` | `store` | `{ sortKey, sortDirection, ranking, collapsed }` |
-| `model-overview.search` | `memory` | `{ text }` |
 | `model-overview.filters` | `memory` | `{ freeOnly, missingGpqa, missingLiveCodeBench }` |
 
 A stored shape from an older version is normalized once back to defaults at
@@ -162,15 +162,32 @@ startup. Benchmark/model data lives only in the file cache
   matches). The host dispatches `up` to the element under the cursor at release
   time, so the pressed-target guard prevents "press A, release over B" from
   firing B; the panel root also clears the pressed target on `up` as a safety
-  net. Hover indicators use `onMouseOver`/`onMouseOut` only.
-- **Press registry lives at module scope** (`g_pressedTarget` / `g_hoveredChip`,
-  not component-local signals): the host can re-render or re-create a slot
-  component between `down` and `up` (for example after the auto-focus that
-  follows a press), and component-local bookkeeping is reset by that, silently
-  cancelling every click. Module scope also keeps the hover marker stable across
-  re-renders. `onMouse` remains unused for activation.
+  net. Hover feedback is deliberately not visualized: mounted subtrees never
+   repaint, so a hover-only update could never become visible (see below).
+- **Press registry lives at module scope** (`g_pressedTarget`, not a
+  component-local signal): the host can re-render or re-create a slot component
+  between `down` and `up` (for example after the auto-focus that follows a
+  press), and component-local bookkeeping is reset by that, silently cancelling
+  every click. `onMouse` remains unused for activation.
 - `input` maps `onInput`/`onChange`/`onSubmit` (value string) and the special
   `focused` prop; `scrollbox` supports `focused`, `stickyScroll`, `stickyStart`.
+- **Painting model (verified empirically on opencode 2.1.4 / OpenTUI 0.6.8,
+  2026-10-25):** the host never repaints a mounted plugin subtree. Host-store
+  reactivity, plugin-owned signals, imperative `TextRenderable.content` writes
+  (a `ReactiveText` probe component), `renderer.requestRender()`, and
+  `invalidateIntrinsicSize()` were all proven to EXECUTE — diagnostic logs
+  recorded correct new content — yet the screen stayed stale until a remount.
+  The design therefore is: the controller coalesces every state mutation into a
+  per-microtask panel remount (`fh_pokeRender` → `panel.close()` +
+  `panel.open()` when our panel is active). The panel renders plain
+  mount-time text; the table body is a single `f_buildTableLines` string.
+  Costs: a brief flicker per interaction, scroll/focus reset, and the sidebar
+  strip repaints only on its own mount.
+- The table body avoids `<For>` row moves entirely: the reconciler's move path
+  in scrollbox trees is unreliable (`_insertNode` silently appends when the
+  anchor lookup fails, `_getParentNode` re-parents nodes to the `scrollbox`
+  itself), which was the root cause of the earlier `<For>`-moves, `<Index>`,
+  and keyed-`<Show>` attempts.
 - Tokens used: `theme.text.base | muted | faint`, `theme.border.base`,
   `theme.background.raised.base` (all `RGBA`).
 - `usePlugin()` returns the `Context` inside slot components — the supported way
@@ -179,70 +196,69 @@ startup. Benchmark/model data lives only in the file cache
 ## Panel behaviour (Phase 6)
 
 1. `session.panel` renders a bordered, titled table with a header row that is
-   clickable only when header-click collapse is enabled (see item 7), ranking
-   chips (`GPQA` / `LiveCodeBench`), a `[refresh]` chip, a search `<input>`, and
-   filter chips (`free`, `missing GPQA`, `missing LCB`). Every selectable chip
-   renders through `f_formatChipLabel(selected, hovered, label)`: `[>>GPQA]` when
-   selected, `[>GPQA]` when merely hovered, plain `[GPQA]` otherwise; selection
-   wins over hover (`[>>GPQA]` while hovered and active). Hover is transient
-   (memory only) via `onMouseOver`/`onMouseOut`.
-2. Columns: Model, Provider, Ctx, In $/M, Out $/M, GPQA, LCB — each sortable
-   column header is clickable and shows `▲`/`▼` when active. The price columns
-   are 10 cells wide so `Out $/M ▲` stays on one line (an 8-wide column wrapped
-   the arrow). Missing values render as `—`; benchmark cells show `#rank score`.
-3. Rows come from the controller's derived memo: search/provider/presence/free
-   filters composed with AND, then the non-mutating comparator; missing values
-   sort last in both directions.
+   clickable only when header-click collapse is enabled (see item 7) and a
+   filter row containing only the `[free]` chip (search and the `missing GPQA` /
+   `missing LCB` / `[redraw]` chips were removed; data updates run through
+   `/mosp update`, view repaints through `/mosp redraw`). Selectable chips
+   render through `f_formatChipLabel(selected, false, label)`: `[>>free]` when
+   active, `[free]` otherwise (hover state is never visualized).
+2. Columns: Model, Provider, Ctx, In $/M, Out $/M, GPQA, LCB — each column header
+   is clickable and shows `▲`/`▼` when active. Ctx sorts numerically and defaults
+   to descending; release-date and benchmark-score columns also default to
+   descending, everything else ascending; missing values always sort last. The
+   price columns are 10 cells wide so `Out $/M ▲` stays on one line (an 8-wide
+   column wrapped the arrow). Missing values render as `—`; benchmark cells show
+   `#rank score`; proxy-mapped rows (`version_proxy`/`family_proxy`) get a `~`
+   prefix and are never presented as the model's own score.
+3. Rows come from the controller's derived memo: the active filters (only the
+   free chip remains in the UI; provider/presence filters stay available at the
+   service layer), then the non-mutating comparator; missing values sort last
+   in both directions.
 4. Footer shows aggregate state, shortened per-source states, last refresh, and
-   warning count; empty cache shows `no cached data — run /model-overview
-   refresh`, filtered-to-nothing shows a distinct message.
+   warning count; empty cache shows `no cached data — run /mosp
+   update`, filtered-to-nothing shows a distinct message.
 5. `sidebar.content` shows `◫ N models · GPQA #rank name score · panel
-   open|closed · /mo`.
+   open|closed · /mosp`. The leader defaults to the GPQA ranking; when the
+   active sort column belongs to a benchmark, the sidebar follows that
+   benchmark instead.
 6. When header-click collapse is enabled, collapse state survives panel toggles;
-   sorting, search, and filters always survive toggles and collapse; repeated
+   sorting and the free filter always survive toggles and collapse; repeated
    toggles never fetch.
 7. Header-click collapse is **opt-in** via `OPENCODE_MODEL_OVERVIEW_HEADER_COLLAPSE`
    (`1|true|on|yes`, trimmed, case-insensitive; anything else or unset = disabled).
    While disabled (default) the `▸`/`▾` indicator is hidden, the header click is a
    no-op, and a stale persisted `collapsed: true` is normalized back to expanded on
-   load. `/model-overview toggle` opens/closes the whole panel and is unaffected.
-8. Activation is press-and-release on the same target. The search input takes
-   focus on its own `onMouseDown` (initial focus off; hover never grabs focus),
-   and every other target blurs it on `onMouseDown`. Chips, sort headers, the
-   collapse header, and refresh only fire when the release happens over the same
-   target that was pressed — hovering alone never activates anything. Enter and
-   collapse also blur search. Press bookkeeping is held in module-scope signals
-   (`g_pressedTarget`, `g_hoveredChip`) so a host re-render between `down` and
-   `up` cannot cancel the click. The `[refresh]` chip shows `[refreshing…]`
-   while a refresh is in flight, ignores presses during it, and routes through
-   the panel's `onRefresh` prop (the same `f_refreshWithToast` path as the slash
-   command), so completion and failure always toast.
+   load. `/mosp toggle` opens/closes the whole panel and is unaffected.
+8. Activation is press-and-release on the same target. Chips, sort headers, and
+   the collapse header only fire when the release happens over the same target
+   that was pressed — hovering alone never activates anything. Press bookkeeping
+   is held in a module-scope signal (`g_pressedTarget`) so a host re-render
+   between `down` and `up` cannot cancel the click. After a successful release
+   the controller mutation schedules the coalesced remount that paints.
 
 ## Manual verification (owner, after build/run)
 
 1. In this project directory, start or reload the TUI (`/reload` forces it).
-2. `/model-overview toggle` → panel appears; with
+2. `/mosp toggle` → panel appears; with
    `OPENCODE_MODEL_OVERVIEW_HEADER_COLLAPSE` exported (`=true`) the header click
    collapses/expands it; without it the header click does nothing and no `▸/▾`
    indicator is shown; repeating the command closes the panel.
-3. `/mo refresh` → refresh toast; footer freshness updates; the `[refresh]` chip
-   also toasts, shows `[refreshing…]` while loading, and ignores presses during a
-   refresh; no network on plain open.
-4. Click a column header → sort direction indicator flips; `/mo sort
+3. `/mosp update` → update toast; footer freshness updates; no network on plain
+   open. `/mosp redraw` re-reads the cache and repaints (info toast) without
+   touching the network.
+4. Click a column header → sort direction indicator flips; `/mosp sort
    input-price` matches the same state.
-5. Ranking chips switch GPQA ↔ LiveCodeBench: active shows `[>>…]`, hovering an
-   inactive chip shows `[>…]`, hovered+active stays `[>>…]`; sidebar leader
-   follows; the `Out $/M` sort arrow stays on the header line.
-6. Search input filters live; `free` / `missing GPQA` / `missing LCB` chips
-   compose and show `[>>…]` when active, `[>…]` on hover.
-7. Search focuses only when clicked; typing before any click must not change the
-   filter; clicking elsewhere clears the focus. Hovering never activates any
-   control: activation requires press-and-release on the same target, and
-   releasing over a different target does nothing. Press bookkeeping is
-   module-scope, so clicks must keep working even if the host re-renders the
-   panel between press and release.
-8. `/mo status` → dialog with the full status breakdown.
-9. Palette lists the `Model overview:` entries; slash `/mo` autocompletes.
+5. Clicking each column title (including Ctx) briefly flickers the panel and it
+   re-mounts with the table reordered, both directions; the `Out $/M` sort arrow
+   stays on the header line and `▲/▼` moves to the clicked column.
+6. The `[free]` chip toggles `[>>free]` / `[free]` and repaints the list live
+   (via the same remount). There is no search box and no `[redraw]` chip.
+7. Hovering never activates or changes anything: activation requires
+   press-and-release on the same target, and releasing over a different target
+   does nothing. Press bookkeeping is module-scope, so clicks keep working even
+   if the host re-renders the panel between press and release.
+8. `/mosp status` → dialog with the full status breakdown.
+9. Palette lists the `Model overview:` entries; slash `/mosp` autocompletes.
 10. Stop a source (offline) → panel stays usable, footer shows `partial`/`stale`.
 
 If the plugin fails to load, the service log
@@ -251,12 +267,16 @@ If the plugin fails to load, the service log
 ## Risks / open items
 
 - `data.location.model.list()` reactivity: reads happen inside the controller
-  and are refreshed after `data.location.model.sync()`; if the host returns
-  snapshots, the panel may need an explicit invalidate after external changes.
+  and are refreshed after `data.location.model.sync()`; host-store changes never
+  drive plugin reactivity (dual runtime), so the controller mirrors all
+  render-relevant state in its own signals.
+- The close→open repaint workaround exists because the host does not repaint
+  mounted slot subtrees; if upstream fixes the painting path, `fh_pokeRender`
+  can revert to a plain `requestRender()`.
 - Panel width is host-owned (default half of the available width, drag-resizable
   and persisted by the host). The plugin cannot request a width; a narrower
   default would require an upstream host option.
-- Filter/search state is intentionally ephemeral; only view preferences are
-  durable.
+- Filter state is session-ephemeral (host memory mirror); only view preferences
+  are durable.
 - `session.panel` exists only in sessions; on the home screen `open()` returns
   `false` (handled with a warning toast).

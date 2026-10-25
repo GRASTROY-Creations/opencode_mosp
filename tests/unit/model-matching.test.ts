@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import type { BenchmarkMapping } from "../../src/config/benchmark-mappings";
 import type { ModelAlias } from "../../src/config/model-aliases";
 import {
   f_matchBenchmarkRecords,
@@ -31,6 +32,7 @@ describe("f_matchBenchmarkRecords", () => {
 
     expect(vl_result.matches).toHaveLength(1);
     expect(vl_result.matches[0]?.strategy).toBe("exact-id");
+    expect(vl_result.matches[0]?.matchType).toBe("exact");
     expect(vl_result.models[0]?.benchmarks).toHaveLength(1);
   });
 
@@ -76,6 +78,7 @@ describe("f_matchBenchmarkRecords", () => {
     );
 
     expect(vl_result.matches[0]?.strategy).toBe("alias");
+    expect(vl_result.matches[0]?.matchType).toBe("alias");
     expect(vl_result.matches[0]?.modelId).toBe("test/model-c");
   });
 
@@ -244,5 +247,67 @@ describe("f_matchBenchmarkRecords", () => {
 
     expect(vl_result.models).not.toBe(vl_models);
     expect(vl_models[0]?.benchmarks).toEqual([]);
+  });
+});
+
+describe("reviewed benchmark mappings", () => {
+  const k_mapping: BenchmarkMapping = {
+    benchmarkId: "gpqa",
+    sourceModelId: "External Alpha",
+    opencodeModelId: "test/model-a",
+    matchType: "family_proxy",
+    reason: "test mapping",
+  };
+
+  test("attaches through a mapping and records the entry kind", () => {
+    const vl_model = f_createTestModel({ modelId: "model-a" });
+    const vl_benchmark = f_createTestBenchmark("gpqa", 66, {
+      sourceModelId: "External Alpha",
+    });
+
+    const vl_result = f_matchBenchmarkRecords([vl_model], [vl_benchmark], [], [
+      k_mapping,
+    ]);
+
+    expect(vl_result.matches[0]?.strategy).toBe("mapping");
+    expect(vl_result.matches[0]?.matchType).toBe("family_proxy");
+    expect(vl_result.models[0]?.benchmarks[0]?.matchType).toBe("family_proxy");
+  });
+
+  test("records a mapping whose registry target is absent", () => {
+    const vl_result = f_matchBenchmarkRecords(
+      [f_createTestModel({ modelId: "model-a" })],
+      [f_createTestBenchmark("gpqa", 66, { sourceModelId: "External Alpha" })],
+      [],
+      [{ ...k_mapping, opencodeModelId: "test/missing" }],
+    );
+
+    expect(vl_result.unmatched[0]?.reason).toBe("mapping-target-missing");
+  });
+
+  test("drops ambiguous duplicate mapping keys", () => {
+    const vl_result = f_matchBenchmarkRecords(
+      [f_createTestModel({ modelId: "model-a" })],
+      [f_createTestBenchmark("gpqa", 66, { sourceModelId: "External Alpha" })],
+      [],
+      [k_mapping, { ...k_mapping, opencodeModelId: "test/model-b" }],
+    );
+
+    expect(vl_result.matches).toHaveLength(0);
+    expect(vl_result.unmatched[0]?.reason).toBe("no-match");
+  });
+
+  test("mapping runs before normalized matching", () => {
+    const vl_model = f_createTestModel({ modelId: "model-a" });
+    const vl_benchmark = f_createTestBenchmark("gpqa", 66, {
+      sourceModelId: "MODEL_A",
+    });
+
+    const vl_result = f_matchBenchmarkRecords([vl_model], [vl_benchmark], [], [
+      { ...k_mapping, sourceModelId: "MODEL_A", matchType: "version_proxy" },
+    ]);
+
+    expect(vl_result.matches[0]?.strategy).toBe("mapping");
+    expect(vl_result.matches[0]?.matchType).toBe("version_proxy");
   });
 });

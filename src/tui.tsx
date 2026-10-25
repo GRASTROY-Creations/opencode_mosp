@@ -1,20 +1,12 @@
 /** @jsxImportSource @opentui/solid */
 import { Plugin, usePlugin } from "@opencode/plugin/tui";
-import { For, Show, createMemo, createSignal } from "solid-js";
-import type { ModelBenchmark } from "./domain/model-benchmark";
+import { For, Show, createSignal } from "solid-js";
 import type { ModelSortKey } from "./domain/model-sort";
-import { f_getBenchmarkForModel, type ModelRecord } from "./domain/model-record";
-import {
-  f_formatContext,
-  f_formatPrice,
-  f_formatRank,
-  f_formatScore,
-  f_truncate,
-} from "./ui/format";
 import {
   f_buildSidebarSummary,
   f_buildStatusLine,
   f_buildStatusLines,
+  f_buildTableLines,
   f_createOverviewController,
   f_describeSnapshot,
   f_formatChipLabel,
@@ -29,10 +21,19 @@ import {
  *
  * The panel is a pure renderer over `src/ui/panel-controller.ts`:
  * - data comes from the cache only (`f_getModelOverview`); opening, toggling,
- *   sorting, searching, and filtering never trigger a network request;
- * - `refresh` (chip, palette, or `/model-overview refresh`) is the single
- *   explicit path that talks to sources, with per-source failure isolation;
+ *   sorting, and filtering never trigger a network request;
+ * - `update` (palette or `/mosp update`) is the single explicit path that
+ *   talks to sources, with per-source failure isolation; `/mosp redraw` only
+ *   re-reads the cache and repaints the view;
  * - missing values render as an em dash and are never invented.
+ *
+ * Painting model (verified on opencode 2.1.4 / OpenTUI 0.6.8, 2026-10-25):
+ * the host never repaints a mounted plugin subtree, so every controller
+ * mutation triggers a coalesced panel remount (close → open) in
+ * `panel-controller`. This file therefore renders plain mount-time text only —
+ * no reactive text components or render pokes. Hover is deliberately not
+ * visualized: a hover-driven repaint could only work through another remount,
+ * which would flicker constantly. See docs/architecture/ui-integration.md.
  */
 
 const k_panelName = "model-overview";
@@ -41,9 +42,7 @@ const k_panelName = "model-overview";
 // re-render (or re-create) the slot component between a mouse `down` and its
 // `up`. Component-local signals would be reset inside that window and the
 // pressed-target guard would cancel every click (all controls went dead).
-// See docs/architecture/ui-integration.md ("Mouse and rendering").
 const [g_pressedTarget, g_setPressedTarget] = createSignal<string | null>(null);
-const [g_hoveredChip, g_setHoveredChip] = createSignal<string | null>(null);
 
 /** The subset of the host's panel input this panel renders from. */
 interface PanelView {
@@ -58,7 +57,7 @@ interface PanelView {
 }
 
 interface OverviewColumn {
-  readonly key: ModelSortKey | null;
+  readonly key: ModelSortKey;
   readonly label: string;
   readonly width: number;
 }
@@ -66,83 +65,42 @@ interface OverviewColumn {
 const k_columns: readonly OverviewColumn[] = [
   { key: "name", label: "Model", width: 24 },
   { key: "providerName", label: "Provider", width: 14 },
-  { key: null, label: "Ctx", width: 6 },
+  { key: "contextWindow", label: "Ctx", width: 6 },
   { key: "inputPrice", label: "In $/M", width: 10 },
   { key: "outputPrice", label: "Out $/M", width: 10 },
   { key: "gpqaRank", label: "GPQA", width: 11 },
   { key: "livecodebenchRank", label: "LCB", width: 11 },
 ];
 
-/** `#rank score` when both exist; a lone value still renders. */
-function f_formatBenchmarkCell(p_benchmark: ModelBenchmark | null): string {
-  if (p_benchmark === null) return "—";
-  const vl_parts: string[] = [];
-  if (p_benchmark.rank !== null) vl_parts.push(f_formatRank(p_benchmark.rank));
-  if (p_benchmark.score !== null) vl_parts.push(f_formatScore(p_benchmark.score));
-  return vl_parts.length > 0 ? vl_parts.join(" ") : "—";
-}
-
-function OverviewRow(props: { readonly model: ModelRecord; readonly onMouseDown: () => void }) {
-  const context = usePlugin();
-  const vl_gpqa = f_getBenchmarkForModel(props.model, "gpqa");
-  const vl_liveCodeBench = f_getBenchmarkForModel(props.model, "livecodebench");
-  return (
-    <box flexDirection="row" gap={1} paddingLeft={1} onMouseDown={props.onMouseDown}>
-      <box width={24}>
-        <text fg={context.theme.text.base}>{f_truncate(props.model.name, 23)}</text>
-      </box>
-      <box width={14}>
-        <text fg={context.theme.text.muted}>{f_truncate(props.model.providerName, 13)}</text>
-      </box>
-      <box width={6}>
-        <text fg={context.theme.text.muted}>{f_formatContext(props.model.contextWindow)}</text>
-      </box>
-      <box width={10}>
-        <text fg={context.theme.text.base}>
-          {f_formatPrice(props.model.pricing.inputUsdPerMillionTokens)}
-        </text>
-      </box>
-      <box width={10}>
-        <text fg={context.theme.text.base}>
-          {f_formatPrice(props.model.pricing.outputUsdPerMillionTokens)}
-        </text>
-      </box>
-      <box width={11}>
-        <text fg={context.theme.text.base}>{f_formatBenchmarkCell(vl_gpqa)}</text>
-      </box>
-      <box width={11}>
-        <text fg={context.theme.text.base}>{f_formatBenchmarkCell(vl_liveCodeBench)}</text>
-      </box>
-    </box>
-  );
+/**
+ * Narrow panels drop the least important columns first so the header row
+ * (the sort affordance) always fits on one line.
+ */
+function fh_visibleColumns(p_width: number): readonly OverviewColumn[] {
+  return k_columns.filter((p_column) => {
+    if (p_column.key === "contextWindow") return p_width >= 92;
+    if (p_column.key === "providerName") return p_width >= 76;
+    return true;
+  });
 }
 
 function ModelOverviewPanel(props: {
   readonly input: PanelView;
   readonly controller: OverviewController;
-  /** Chip-initiated refresh: routed through the toast path in f_setup. */
-  readonly onRefresh: () => void;
 }) {
   const context = usePlugin();
-  const [vl_searchFocused, vl_setSearchFocused] = createSignal(false);
-  const vl_collapsed = () => props.controller.preferences.collapsed;
-  const vl_rows = () => props.controller.rows();
-  const vl_modelCount = () => props.controller.snapshot()?.models.length ?? 0;
+  // All values are read once per mount; a controller mutation remounts the
+  // panel (the only path this host repaints), so plain expressions suffice.
+  const vl_collapsed = props.controller.collapsed();
+  const vl_rows = props.controller.rows();
+  const vl_filters = props.controller.filters();
+  const vl_modelCount = props.controller.snapshot()?.models.length ?? 0;
+  const vl_visibleColumns = fh_visibleColumns(props.input.width);
+  const vl_tableLines = f_buildTableLines(vl_rows.rows, vl_visibleColumns);
+  const vl_sortKey = props.controller.sortKey();
+  const vl_sortDirection = props.controller.sortDirection();
   const fh_chipColor = (p_active: boolean) =>
     p_active ? context.theme.text.base : context.theme.text.faint;
-  // Search takes focus only from its own click; every other click clears it.
-  const fh_blurSearch = (): void => {
-    vl_setSearchFocused(false);
-  };
-  // Hover is transient cursor focus. The guarded clear keeps a fast hand-off
-  // from one chip to the next safe (out may fire after the next over).
-  const fh_setChipHover = (p_id: string, p_hovered: boolean): void => {
-    if (p_hovered) {
-      g_setHoveredChip(p_id);
-      return;
-    }
-    g_setHoveredChip((p_current) => (p_current === p_id ? null : p_current));
-  };
   // Activation is press-and-release on the same target: the host dispatches
   // mouse `up` to the element under the cursor at release time, so without the
   // pressed-target guard a press on one chip and release over another would
@@ -150,7 +108,6 @@ function ModelOverviewPanel(props: {
   // fires for every mouse event type, including hover moves. The registry lives
   // at module scope so a host re-render between down and up cannot cancel it.
   const fh_beginPress = (p_id: string): void => {
-    fh_blurSearch();
     g_setPressedTarget(p_id);
   };
   const fh_endPress = (p_id: string, p_action: () => void): void => {
@@ -170,8 +127,8 @@ function ModelOverviewPanel(props: {
         title="Model Overview"
         bottomTitle={
           props.controller.headerCollapseEnabled
-            ? "esc closes · click header to collapse · /model-overview toggle"
-            : "esc closes · /model-overview toggle"
+            ? "esc closes · click header to collapse · /mosp toggle"
+            : "esc closes · /mosp toggle"
         }
         bottomTitleAlignment="right"
         onMouseUp={() => {
@@ -183,180 +140,65 @@ function ModelOverviewPanel(props: {
           gap={1}
           paddingLeft={1}
           onMouseDown={() => {
-            fh_blurSearch();
-            g_setHoveredChip(null);
             g_setPressedTarget("panel-header");
           }}
           onMouseUp={() => fh_endPress("panel-header", props.controller.toggleCollapsed)}
         >
           <text fg={context.theme.text.base}>
             {props.controller.headerCollapseEnabled
-              ? `${vl_collapsed() ? "▸" : "▾"} Model Overview`
+              ? `${vl_collapsed ? "▸" : "▾"} Model Overview`
               : "Model Overview"}
           </text>
           <text fg={context.theme.text.faint}>
-            {vl_modelCount()} models{props.controller.loading() ? " · refreshing…" : ""}
+            {`${vl_modelCount} models${props.controller.loading() ? " · refreshing…" : ""}`}
           </text>
         </box>
-        <Show when={!vl_collapsed()}>
+        <Show when={!vl_collapsed}>
           <box flexDirection="row" gap={1} paddingLeft={1}>
             <box
-              onMouseOver={() => fh_setChipHover("gpqa", true)}
-              onMouseOut={() => fh_setChipHover("gpqa", false)}
-              onMouseDown={() => fh_beginPress("chip-gpqa")}
-              onMouseUp={() => fh_endPress("chip-gpqa", () => props.controller.setRanking("gpqa"))}
-            >
-              <text fg={fh_chipColor(props.controller.preferences.ranking === "gpqa")}>
-                {f_formatChipLabel(
-                  props.controller.preferences.ranking === "gpqa",
-                  g_hoveredChip() === "gpqa",
-                  "GPQA",
-                )}
-              </text>
-            </box>
-            <box
-              onMouseOver={() => fh_setChipHover("livecodebench", true)}
-              onMouseOut={() => fh_setChipHover("livecodebench", false)}
-              onMouseDown={() => fh_beginPress("chip-lcb")}
-              onMouseUp={() =>
-                fh_endPress("chip-lcb", () => props.controller.setRanking("livecodebench"))
-              }
-            >
-              <text fg={fh_chipColor(props.controller.preferences.ranking === "livecodebench")}>
-                {f_formatChipLabel(
-                  props.controller.preferences.ranking === "livecodebench",
-                  g_hoveredChip() === "livecodebench",
-                  "LCB",
-                )}
-              </text>
-            </box>
-            <box
-              onMouseOver={() => fh_setChipHover("refresh", true)}
-              onMouseOut={() => fh_setChipHover("refresh", false)}
-              onMouseDown={() => fh_beginPress("refresh")}
-              onMouseUp={() =>
-                fh_endPress("refresh", () => {
-                  if (!props.controller.loading()) props.onRefresh();
-                })
-              }
-            >
-              <text fg={context.theme.text.muted}>
-                {props.controller.loading()
-                  ? "[refreshing…]"
-                  : f_formatChipLabel(false, g_hoveredChip() === "refresh", "refresh")}
-              </text>
-            </box>
-            <input
-              placeholder="search"
-              value={props.controller.search.text}
-              focused={vl_searchFocused()}
-              onInput={(p_value) => props.controller.setSearchText(p_value)}
-              onSubmit={() => vl_setSearchFocused(false)}
-              onMouseDown={() => {
-                g_setPressedTarget(null);
-                vl_setSearchFocused(true);
-              }}
-            />
-          </box>
-          <box flexDirection="row" gap={1} paddingLeft={1}>
-            <box
-              onMouseOver={() => fh_setChipHover("free", true)}
-              onMouseOut={() => fh_setChipHover("free", false)}
               onMouseDown={() => fh_beginPress("chip-free")}
               onMouseUp={() => fh_endPress("chip-free", props.controller.toggleFreeOnly)}
             >
-              <text fg={fh_chipColor(props.controller.filters.freeOnly)}>
-                {f_formatChipLabel(
-                  props.controller.filters.freeOnly,
-                  g_hoveredChip() === "free",
-                  "free",
-                )}
-              </text>
-            </box>
-            <box
-              onMouseOver={() => fh_setChipHover("missing-gpqa", true)}
-              onMouseOut={() => fh_setChipHover("missing-gpqa", false)}
-              onMouseDown={() => fh_beginPress("chip-missing-gpqa")}
-              onMouseUp={() =>
-                fh_endPress("chip-missing-gpqa", props.controller.toggleMissingGpqa)
-              }
-            >
-              <text fg={fh_chipColor(props.controller.filters.missingGpqa)}>
-                {f_formatChipLabel(
-                  props.controller.filters.missingGpqa,
-                  g_hoveredChip() === "missing-gpqa",
-                  "missing GPQA",
-                )}
-              </text>
-            </box>
-            <box
-              onMouseOver={() => fh_setChipHover("missing-lcb", true)}
-              onMouseOut={() => fh_setChipHover("missing-lcb", false)}
-              onMouseDown={() => fh_beginPress("chip-missing-lcb")}
-              onMouseUp={() =>
-                fh_endPress("chip-missing-lcb", props.controller.toggleMissingLiveCodeBench)
-              }
-            >
-              <text fg={fh_chipColor(props.controller.filters.missingLiveCodeBench)}>
-                {f_formatChipLabel(
-                  props.controller.filters.missingLiveCodeBench,
-                  g_hoveredChip() === "missing-lcb",
-                  "missing LCB",
-                )}
+              <text fg={fh_chipColor(vl_filters.freeOnly)}>
+                {f_formatChipLabel(vl_filters.freeOnly, false, "free")}
               </text>
             </box>
           </box>
           <box flexDirection="row" gap={1} paddingLeft={1}>
-            <For each={k_columns}>
+            <For each={vl_visibleColumns}>
               {(column) => {
-                const vl_key = column.key;
-                const vl_active = (): boolean =>
-                  vl_key !== null && props.controller.preferences.sortKey === vl_key;
+                const vl_active = vl_sortKey === column.key;
+                const vl_title = vl_active
+                  ? `${column.label} ${vl_sortDirection === "asc" ? "▲" : "▼"}`
+                  : column.label;
                 return (
                   <box
                     width={column.width}
-                    onMouseDown={() => {
-                      if (vl_key === null) {
-                        fh_blurSearch();
-                      } else {
-                        fh_beginPress(`col:${vl_key}`);
-                      }
-                    }}
-                    onMouseUp={() => {
-                      if (vl_key === null) return;
-                      fh_endPress(`col:${vl_key}`, () => props.controller.toggleSort(vl_key));
-                    }}
+                    onMouseDown={() => fh_beginPress(`col:${column.key}`)}
+                    onMouseUp={() =>
+                      fh_endPress(`col:${column.key}`, () =>
+                        props.controller.toggleSort(column.key),
+                      )
+                    }
                   >
-                    <text fg={vl_active() ? context.theme.text.base : context.theme.text.muted}>
-                      {column.label}
-                      {vl_active()
-                        ? props.controller.preferences.sortDirection === "asc"
-                          ? " ▲"
-                          : " ▼"
-                        : ""}
+                    <text fg={vl_active ? context.theme.text.base : context.theme.text.muted}>
+                      {vl_title}
                     </text>
                   </box>
                 );
               }}
             </For>
           </box>
-          <scrollbox
-            flexGrow={1}
-            onMouseDown={() => {
-              fh_blurSearch();
-            }}
-          >
+          <scrollbox flexGrow={1}>
             <box flexDirection="column">
-              <Show when={vl_rows().filteredCount === 0}>
+              <Show when={vl_rows.filteredCount === 0}>
                 <text fg={context.theme.text.muted}>
-                  {vl_rows().totalCount === 0
-                    ? "No cached models — run /model-overview refresh"
-                    : "No models match the current search/filters"}
+                  {vl_rows.totalCount === 0
+                    ? "No cached models — run /mosp update"
+                    : "No models match the current filters"}
                 </text>
               </Show>
-              <For each={vl_rows().rows}>
-                {(model) => <OverviewRow model={model} onMouseDown={fh_blurSearch} />}
-              </For>
+              <text fg={context.theme.text.base}>{vl_tableLines.join("\n")}</text>
             </box>
           </scrollbox>
           <box paddingLeft={1}>
@@ -376,27 +218,21 @@ function ModelOverviewPanel(props: {
 
 function SidebarStatus(props: { readonly controller: OverviewController }) {
   const context = usePlugin();
-  const vl_summary = createMemo(() =>
-    f_buildSidebarSummary(
-      props.controller.rankingLeader(),
-      props.controller.snapshot()?.models.length ?? 0,
-      props.controller.preferences.ranking,
-    ),
+  const vl_summary = f_buildSidebarSummary(
+    props.controller.rankingLeader(),
+    props.controller.snapshot()?.models.length ?? 0,
+    props.controller.ranking(),
   );
-  const vl_panel = createMemo(() =>
-    context.ui.panel.current() === undefined ? "closed" : "open",
-  );
+  const vl_panel = context.ui.panel.current() === undefined ? "closed" : "open";
   return (
     <box flexDirection="row" paddingLeft={1}>
-      <text fg={context.theme.text.muted}>
-        {`◫ ${vl_summary()} · panel ${vl_panel()} · /mo`}
-      </text>
+      <text fg={context.theme.text.muted}>{`◫ ${vl_summary} · panel ${vl_panel} · /mosp`}</text>
     </box>
   );
 }
 
 function f_setup(context: Plugin.Context): () => void {
-  const controller = f_createOverviewController(context);
+  const controller = f_createOverviewController(context, k_panelName);
   void controller.loadFromCache();
 
   function f_togglePanel(): void {
@@ -416,12 +252,12 @@ function f_setup(context: Plugin.Context): () => void {
     }
   }
 
-  async function f_refreshWithToast(): Promise<void> {
+  async function f_updateDataWithToast(): Promise<void> {
     const vl_snapshot = await controller.refresh(true);
     if (vl_snapshot === undefined) {
       context.ui.toast.show({
         title: "Model overview",
-        message: "Refresh failed — see /model-overview status for details.",
+        message: "Update failed — see /mosp status for details.",
         variant: "warning",
       });
       return;
@@ -433,9 +269,8 @@ function f_setup(context: Plugin.Context): () => void {
     const vl_lines = f_buildStatusLines(
       controller.snapshot(),
       controller.rows(),
-      controller.preferences,
-      controller.search.text,
-      controller.filters,
+      controller.preferences(),
+      controller.filters(),
       controller.loading(),
       controller.lastError(),
     );
@@ -462,8 +297,16 @@ function f_setup(context: Plugin.Context): () => void {
       case "status":
         f_showStatus();
         return;
-      case "refresh":
-        void f_refreshWithToast();
+      case "update":
+        void f_updateDataWithToast();
+        return;
+      case "redraw":
+        void controller.loadFromCache();
+        context.ui.toast.show({
+          title: "Model overview",
+          message: "View redrawn from cache.",
+          variant: "info",
+        });
         return;
       case "sort":
         controller.toggleSort(vl_command.key);
@@ -473,27 +316,13 @@ function f_setup(context: Plugin.Context): () => void {
           variant: "info",
         });
         return;
-      case "ranking":
-        controller.setRanking(vl_command.ranking);
-        context.ui.toast.show({
-          title: "Model overview",
-          message: `Ranking on ${vl_command.ranking === "gpqa" ? "GPQA" : "LiveCodeBench"}.`,
-          variant: "info",
-        });
-        return;
     }
   }
 
   const vl_disposePanel = context.ui.slot({
     append: "session.panel",
     render: (input) => (
-      <ModelOverviewPanel
-        input={input}
-        controller={controller}
-        onRefresh={() => {
-          void f_refreshWithToast();
-        }}
-      />
+      <ModelOverviewPanel input={input} controller={controller} />
     ),
   });
   const vl_disposeSidebar = context.ui.slot({
@@ -520,17 +349,26 @@ function f_setup(context: Plugin.Context): () => void {
         run: f_showStatus,
       },
       {
-        id: "model_overview.refresh",
-        title: "Model overview: refresh data",
+        id: "model_overview.update",
+        title: "Model overview: update data",
         group: "Model overview",
         palette: true,
-        run: f_refreshWithToast,
+        run: f_updateDataWithToast,
+      },
+      {
+        id: "model_overview.redraw",
+        title: "Model overview: redraw view",
+        group: "Model overview",
+        palette: true,
+        run: () => {
+          void controller.loadFromCache();
+        },
       },
       {
         id: "model_overview.command",
         title: "Model overview: run command",
         group: "Model overview",
-        slash: { name: "model-overview", aliases: ["mo"], arguments: true },
+        slash: { name: "mosp", arguments: true },
         run: f_runCommand,
       },
     ],

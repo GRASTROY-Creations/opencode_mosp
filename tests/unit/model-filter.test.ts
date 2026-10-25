@@ -58,34 +58,6 @@ describe("f_filterModels", () => {
     expect(f_filterModels(vl_models)).toEqual(vl_models);
   });
 
-  test("searches names, providers, and identifiers case-insensitively", () => {
-    const vl_models = [k_gpqaModel, k_lcbOnlyModel, k_missingModel];
-
-    expect(
-      f_filterModels(vl_models, { searchText: "scored" }).map(
-        (p_model) => p_model.modelId,
-      ),
-    ).toEqual(["gpqa-model"]);
-
-    expect(
-      f_filterModels(vl_models, { searchText: "OTHER provider" }).map(
-        (p_model) => p_model.modelId,
-      ),
-    ).toEqual(["lcb-only"]);
-
-    expect(
-      f_filterModels(vl_models, { searchText: "other/lcb" }).map(
-        (p_model) => p_model.modelId,
-      ),
-    ).toEqual(["lcb-only"]);
-
-    expect(
-      f_filterModels(vl_models, { searchText: "canonical-gpqa" }).map(
-        (p_model) => p_model.modelId,
-      ),
-    ).toEqual(["gpqa-model"]);
-  });
-
   test("filters by exact provider ID", () => {
     const vl_models = [k_gpqaModel, k_lcbOnlyModel, k_freeModel];
 
@@ -173,7 +145,6 @@ describe("f_filterModels", () => {
 
     expect(
       f_filterModels(vl_models, {
-        searchText: "model",
         providerIds: ["other"],
         benchmarkPresence: { scope: "livecodebench", state: "present" },
       }).map((p_model) => p_model.modelId),
@@ -183,7 +154,7 @@ describe("f_filterModels", () => {
   test("does not mutate the input array", () => {
     const vl_models = [k_gpqaModel, k_lcbOnlyModel];
 
-    const vl_filtered = f_filterModels(vl_models, { searchText: "gpqa" });
+    const vl_filtered = f_filterModels(vl_models);
 
     expect(vl_filtered).not.toBe(vl_models);
     expect(vl_models).toHaveLength(2);

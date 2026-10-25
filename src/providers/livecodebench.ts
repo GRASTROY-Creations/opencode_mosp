@@ -282,6 +282,7 @@ export function f_parseLiveCodeBench(
       windowStart: vl_windowStart,
       windowEnd: vl_windowEnd,
       sourceModelId: vl_model,
+      matchType: null,
       sourceUrl:
         vl_modelLinks.get(vl_model) ?? k_liveCodeBenchLeaderboardUrl,
       evaluatedAt: null,

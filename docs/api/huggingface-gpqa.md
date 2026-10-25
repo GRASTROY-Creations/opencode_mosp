@@ -93,3 +93,17 @@ type GpqaLeaderboardEntry = {
   variants? Observed values 18.69–94.44 suggest yes, but only the Diamond subset
   matters for us.
 - Whether HF exposes ETags/Last-Modified for conditional requests — Phase 3.
+
+## Mapping validation (2026-10-25)
+
+- The KNOWLEDGE_04.md candidate table was checked against the live Diamond
+  subset: **zero** of its `gpqaModelId` strings appear verbatim among the 25
+  live `modelId`s. Live ids carry HF org prefixes (e.g. `moonshotai/Kimi-K2.6`,
+  `Qwen/Qwen3.5-397B-A17B`); the candidate table uses un-prefixed/space
+  variants.
+- The candidate doc also contains a machine-generation artifact
+  ("Написание текста") — same suspect provenance as the discarded
+  KNOWLEDGE_01 draft.
+- `k_benchmarkMappings` stays empty until the owner confirms real identities;
+  org-prefix/space normalization alone is speculative and NOT allowed as a
+  reviewed mapping.

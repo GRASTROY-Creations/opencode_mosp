@@ -2,8 +2,8 @@
  * Unit tests for the panel controller's pure logic and format helpers.
  *
  * The controller factory itself needs a host, so these tests cover every
- * decision that can be exercised without one: sorting/ranking state
- * transitions, command parsing, row derivation, and status text.
+ * decision that can be exercised without one: sorting state transitions,
+ * command parsing, row derivation, and status text.
  */
 
 import { describe, expect, test } from "bun:test";
@@ -21,20 +21,20 @@ import {
   f_buildSidebarSummary,
   f_buildStatusLine,
   f_buildStatusLines,
+  f_buildTableLines,
   f_deriveOverviewRows,
   f_formatChipLabel,
   f_getDefaultSortDirection,
   f_getSortKeyLabel,
-  f_nextRankingState,
   f_nextSortState,
   f_parseOverviewCommand,
   f_resolveCollapsedState,
   f_resolveHeaderCollapseEnabled,
   k_defaultFilters,
-  k_defaultSearchState,
   k_defaultViewPreferences,
   k_headerCollapseEnvVar,
   type OverviewViewPreferences,
+  type TableColumn,
 } from "../../src/ui/panel-controller";
 import { f_createTestBenchmark, f_createTestModel } from "./test-models";
 
@@ -127,6 +127,7 @@ describe("sort and ranking state", () => {
     expect(f_getDefaultSortDirection("gpqaScore")).toBe("desc");
     expect(f_getDefaultSortDirection("livecodebenchScore")).toBe("desc");
     expect(f_getDefaultSortDirection("releaseDate")).toBe("desc");
+    expect(f_getDefaultSortDirection("contextWindow")).toBe("desc");
     expect(f_getDefaultSortDirection("gpqaRank")).toBe("asc");
     expect(f_getDefaultSortDirection("inputPrice")).toBe("asc");
     expect(f_getDefaultSortDirection("name")).toBe("asc");
@@ -152,33 +153,6 @@ describe("sort and ranking state", () => {
       sortDirection: "asc",
     });
   });
-
-  test("switching ranking moves a benchmark sort column to the active benchmark", () => {
-    expect(
-      f_nextRankingState(fh_preferences({ ranking: "gpqa", sortKey: "gpqaRank", sortDirection: "desc" }), "livecodebench"),
-    ).toEqual({ ranking: "livecodebench", sortKey: "livecodebenchRank", sortDirection: "asc" });
-    expect(
-      f_nextRankingState(
-        fh_preferences({ ranking: "livecodebench", sortKey: "livecodebenchScore", sortDirection: "asc" }),
-        "gpqa",
-      ),
-    ).toEqual({ ranking: "gpqa", sortKey: "gpqaRank", sortDirection: "asc" });
-  });
-
-  test("switching ranking keeps unrelated sort columns untouched", () => {
-    expect(
-      f_nextRankingState(fh_preferences({ ranking: "gpqa", sortKey: "name", sortDirection: "desc" }), "livecodebench"),
-    ).toEqual({ ranking: "livecodebench", sortKey: "name", sortDirection: "desc" });
-  });
-
-  test("re-selecting the same ranking changes nothing", () => {
-    const vl_preferences = fh_preferences({ ranking: "gpqa", sortKey: "gpqaScore", sortDirection: "desc" });
-    expect(f_nextRankingState(vl_preferences, "gpqa")).toEqual({
-      ranking: "gpqa",
-      sortKey: "gpqaScore",
-      sortDirection: "desc",
-    });
-  });
 });
 
 describe("command parsing", () => {
@@ -188,9 +162,11 @@ describe("command parsing", () => {
     expect(f_parseOverviewCommand("toggle")).toEqual({ kind: "toggle" });
   });
 
-  test("status and refresh parse case-insensitively", () => {
+  test("status, update, and redraw parse case-insensitively", () => {
     expect(f_parseOverviewCommand(" STATUS ")).toEqual({ kind: "status" });
-    expect(f_parseOverviewCommand("Refresh")).toEqual({ kind: "refresh" });
+    expect(f_parseOverviewCommand("Update")).toEqual({ kind: "update" });
+    expect(f_parseOverviewCommand("REDRAW")).toEqual({ kind: "redraw" });
+    expect(f_parseOverviewCommand("refresh")).toBeUndefined();
   });
 
   test("sort accepts friendly aliases and column keys", () => {
@@ -200,6 +176,7 @@ describe("command parsing", () => {
     expect(f_parseOverviewCommand("sort inputPrice")).toEqual({ kind: "sort", key: "inputPrice" });
     expect(f_parseOverviewCommand("sort output-price")).toEqual({ kind: "sort", key: "outputPrice" });
     expect(f_parseOverviewCommand("sort releaseDate")).toEqual({ kind: "sort", key: "releaseDate" });
+    expect(f_parseOverviewCommand("sort ctx")).toEqual({ kind: "sort", key: "contextWindow" });
   });
 
   test("invalid commands are rejected", () => {
@@ -207,14 +184,6 @@ describe("command parsing", () => {
     expect(f_parseOverviewCommand("sort nonsense")).toBeUndefined();
     expect(f_parseOverviewCommand("ranking lcb")).toBeUndefined();
     expect(f_parseOverviewCommand("nope")).toBeUndefined();
-  });
-
-  test("ranking parses both verified benchmarks", () => {
-    expect(f_parseOverviewCommand("ranking gpqa")).toEqual({ kind: "ranking", ranking: "gpqa" });
-    expect(f_parseOverviewCommand("ranking livecodebench")).toEqual({
-      kind: "ranking",
-      ranking: "livecodebench",
-    });
   });
 
   test("extra trailing tokens are ignored", () => {
@@ -226,6 +195,7 @@ describe("command parsing", () => {
     expect(f_getSortKeyLabel("providerName")).toBe("Provider");
     expect(f_getSortKeyLabel("gpqaScore")).toBe("GPQA");
     expect(f_getSortKeyLabel("livecodebenchRank")).toBe("LCB");
+    expect(f_getSortKeyLabel("contextWindow")).toBe("Ctx");
     expect(f_getSortKeyLabel("inputPrice")).toBe("In $/M");
   });
 });
@@ -240,6 +210,7 @@ describe("derived rows", () => {
       name: "Claude Test",
       inputPrice: 3,
       outputPrice: 15,
+      contextWindow: 200_000,
       benchmarks: [f_createTestBenchmark("gpqa", 80.1, { rank: 2 })],
     }),
     f_createTestModel({
@@ -250,6 +221,7 @@ describe("derived rows", () => {
       name: "GPT Test",
       inputPrice: 0,
       outputPrice: 0,
+      contextWindow: 1_000_000,
     }),
     f_createTestModel({
       id: "google/gemini-test",
@@ -259,12 +231,13 @@ describe("derived rows", () => {
       name: "Gemini Test",
       inputPrice: null,
       outputPrice: null,
+      contextWindow: null,
       benchmarks: [f_createTestBenchmark("livecodebench", 50.5, { rank: 1 })],
     }),
   ];
 
   test("no filters returns everything sorted by the active column", () => {
-    const vl_rows = f_deriveOverviewRows(vl_models, fh_preferences(), k_defaultSearchState, k_defaultFilters);
+    const vl_rows = f_deriveOverviewRows(vl_models, fh_preferences(), k_defaultFilters);
     expect(vl_rows.totalCount).toBe(3);
     expect(vl_rows.filteredCount).toBe(3);
     // Default is gpqaRank asc with missing ranks last (ties break by model ID).
@@ -275,28 +248,10 @@ describe("derived rows", () => {
     ]);
   });
 
-  test("search matches name, provider, and ids case-insensitively", () => {
-    const vl_byName = f_deriveOverviewRows(
-      vl_models,
-      fh_preferences(),
-      { text: "CLAUDE" },
-      k_defaultFilters,
-    );
-    expect(vl_byName.rows.map((p_model) => p_model.id)).toEqual(["anthropic/claude-test"]);
-    const vl_byProvider = f_deriveOverviewRows(
-      vl_models,
-      fh_preferences(),
-      { text: "openai" },
-      k_defaultFilters,
-    );
-    expect(vl_byProvider.rows.map((p_model) => p_model.id)).toEqual(["openai/gpt-test"]);
-  });
-
   test("free filter requires explicit zero pricing", () => {
     const vl_rows = f_deriveOverviewRows(
       vl_models,
       fh_preferences(),
-      k_defaultSearchState,
       { ...k_defaultFilters, freeOnly: true },
     );
     expect(vl_rows.rows.map((p_model) => p_model.id)).toEqual(["openai/gpt-test"]);
@@ -306,7 +261,6 @@ describe("derived rows", () => {
     const vl_gpqa = f_deriveOverviewRows(
       vl_models,
       fh_preferences(),
-      k_defaultSearchState,
       { ...k_defaultFilters, missingGpqa: true },
     );
     expect(vl_gpqa.rows.map((p_model) => p_model.id)).toEqual([
@@ -316,7 +270,6 @@ describe("derived rows", () => {
     const vl_lcb = f_deriveOverviewRows(
       vl_models,
       fh_preferences(),
-      k_defaultSearchState,
       { ...k_defaultFilters, missingLiveCodeBench: true },
     );
     expect(vl_lcb.rows.map((p_model) => p_model.id)).toEqual([
@@ -329,10 +282,22 @@ describe("derived rows", () => {
     const vl_asc = f_deriveOverviewRows(
       vl_models,
       fh_preferences({ sortKey: "inputPrice", sortDirection: "asc" }),
-      k_defaultSearchState,
       k_defaultFilters,
     );
     expect(vl_asc.rows.map((p_model) => p_model.id)).toEqual([
+      "openai/gpt-test",
+      "anthropic/claude-test",
+      "google/gemini-test",
+    ]);
+  });
+
+  test("context window sorting is numeric descending with missing values last", () => {
+    const vl_rows = f_deriveOverviewRows(
+      vl_models,
+      fh_preferences({ sortKey: "contextWindow", sortDirection: "desc" }),
+      k_defaultFilters,
+    );
+    expect(vl_rows.rows.map((p_model) => p_model.id)).toEqual([
       "openai/gpt-test",
       "anthropic/claude-test",
       "google/gemini-test",
@@ -343,7 +308,7 @@ describe("derived rows", () => {
 describe("status text", () => {
   test("status line covers missing data, loading, and errors", () => {
     expect(f_buildStatusLine(undefined, false, null)).toBe(
-      "no cached data — run /model-overview refresh",
+      "no cached data — run /mosp update",
     );
     expect(f_buildStatusLine(undefined, true, null)).toBe("refreshing…");
     expect(f_buildStatusLine(f_createSnapshot([]), false, "boom")).toBe("error: boom");
@@ -357,8 +322,8 @@ describe("status text", () => {
     expect(vl_line).toContain("updated 2026-10-24 10:00");
   });
 
-  test("status dialog lists configuration and search state", () => {
-    const vl_rows = f_deriveOverviewRows(f_createDialogModels(), fh_preferences(), { text: "gpt" }, {
+  test("status dialog lists configuration and filters state", () => {
+    const vl_rows = f_deriveOverviewRows(f_createDialogModels(), fh_preferences(), {
       ...k_defaultFilters,
       freeOnly: true,
     });
@@ -366,7 +331,6 @@ describe("status text", () => {
       f_createSnapshot(f_createDialogModels()),
       vl_rows,
       fh_preferences({ sortKey: "inputPrice", sortDirection: "desc" }),
-      "gpt",
       { ...k_defaultFilters, freeOnly: true },
       false,
       null,
@@ -376,7 +340,6 @@ describe("status text", () => {
       `status: ${f_buildStatusLine(f_createSnapshot(f_createDialogModels()), false, null)}`,
     );
     expect(vl_lines.join("\n")).toContain("sort: In $/M descending");
-    expect(vl_lines.join("\n")).toContain("search: gpt");
     expect(vl_lines.join("\n")).toContain("filters: free");
   });
 
@@ -429,3 +392,47 @@ function f_createDialogModels() {
     }),
   ];
 }
+
+describe("table lines", () => {
+  test("formats fixed-width lines with truncation", () => {
+    const vl_columns: readonly TableColumn[] = [
+      { key: "name", width: 10 },
+      { key: "inputPrice", width: 8 },
+    ];
+    const vl_rows = [
+      f_createTestModel({ id: "a/one", name: "A Very Long Model Name", inputPrice: 1.5 }),
+    ];
+    const vl_lines = f_buildTableLines(vl_rows, vl_columns);
+    expect(vl_lines).toHaveLength(1);
+    const vl_line = vl_lines[0] ?? "";
+    expect(vl_line.length).toBe(1 + 10 + 1 + 8);
+    expect(vl_line).toContain("…");
+    expect(vl_line).toContain("$1.50/M");
+  });
+
+  test("formats missing values as an em dash", () => {
+    const vl_columns: readonly TableColumn[] = [{ key: "contextWindow", width: 6 }];
+    const vl_rows = [
+      f_createTestModel({ id: "c/three", name: "Three", contextWindow: null }),
+    ];
+    const vl_lines = f_buildTableLines(vl_rows, vl_columns);
+    const vl_line = vl_lines[0] ?? "";
+    expect(vl_line.length).toBe(1 + 6);
+    expect(vl_line.trim()).toBe("—");
+  });
+
+  test("marks proxy benchmark cells with a tilde", () => {
+    const vl_columns: readonly TableColumn[] = [{ key: "gpqaRank", width: 11 }];
+    const vl_rows = [
+      f_createTestModel({
+        id: "p/proxy",
+        name: "Proxy",
+        benchmarks: [
+          f_createTestBenchmark("gpqa", 50, { rank: 7, matchType: "version_proxy" }),
+        ],
+      }),
+    ];
+    const vl_line = f_buildTableLines(vl_rows, vl_columns)[0] ?? "";
+    expect(vl_line.trim().startsWith("~#7 50.0")).toBe(true);
+  });
+});

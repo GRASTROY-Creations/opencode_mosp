@@ -20,6 +20,7 @@ export type ModelSortKey =
   | "name"
   | "providerName"
   | "releaseDate"
+  | "contextWindow"
   | "gpqaScore"
   | "gpqaRank"
   | "livecodebenchScore"
@@ -32,6 +33,7 @@ export const k_modelSortKeys: readonly ModelSortKey[] = [
   "name",
   "providerName",
   "releaseDate",
+  "contextWindow",
   "gpqaScore",
   "gpqaRank",
   "livecodebenchScore",

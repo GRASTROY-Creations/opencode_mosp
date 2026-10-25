@@ -79,6 +79,7 @@ export function f_createTestBenchmark(
     windowStart: null,
     windowEnd: null,
     sourceModelId: "source-model",
+    matchType: null,
     sourceUrl: null,
     evaluatedAt: null,
     ...p_overrides,

@@ -151,6 +151,7 @@ export function f_parseGpqaLeaderboard(
       windowStart: null,
       windowEnd: null,
       sourceModelId: vl_modelId.value,
+      matchType: null,
       sourceUrl: fh_parseSourceUrl(vl_entry.source),
       evaluatedAt: null,
     });

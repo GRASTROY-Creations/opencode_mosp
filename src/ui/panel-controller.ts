@@ -4,17 +4,25 @@
  * The SolidJS layer in `src/tui.tsx` only renders what this module derives;
  * every non-trivial decision lives here and is unit-testable without a host.
  *
+ * Reactivity model (important):
+ * - The host runtime embeds its own Solid copy (the installed binary is
+ *   self-contained), while this plugin imports Solid from the project. Stores
+ *   created by the host (`context.storage.*`) therefore cannot drive reactive
+ *   updates inside this module.
+ * - Consequence: all render-relevant state lives in controller-owned signals
+ *   (below). Host stores are written through for persistence only and read
+ *   once at creation time. See `docs/architecture/ui-integration.md`.
+ *
  * Data rules:
  * - Panel reads are cache-only (`f_getModelOverview`); no keystroke or toggle
  *   ever triggers a network request.
- * - Live fetching happens exclusively through `refresh` (explicit command,
- *   palette action, or refresh chip).
+ * - Live fetching happens exclusively through `update` (`/mosp update` or the
+ *   palette action); `/mosp redraw` only repaints from cache.
  * - Missing values stay `null`; formatting renders them as an em dash.
  */
 
 import type { Plugin } from "@opencode/plugin/tui";
 import { createMemo, createSignal, type Accessor } from "solid-js";
-import type { Store } from "solid-js/store";
 import type { ModelBenchmark } from "../domain/model-benchmark";
 import { f_getBenchmarkForModel, type ModelRecord } from "../domain/model-record";
 import {
@@ -48,12 +56,17 @@ import {
   type OverviewLoadContext,
 } from "../services/model-overview";
 import { f_sortModels } from "../services/ranking";
-import { f_formatRank, f_formatScore, f_formatTimestamp, f_truncate } from "./format";
+import {
+  f_formatContext,
+  f_formatPrice,
+  f_formatRank,
+  f_formatScore,
+  f_formatTimestamp,
+  f_truncate,
+} from "./format";
 
 /** Durable view preferences (survive collapse, restart, and refresh). */
 export const k_preferencesStorageKey = "model-overview.preferences";
-/** Ephemeral search text. */
-export const k_searchStorageKey = "model-overview.search";
 /** Ephemeral filter toggles. */
 export const k_filtersStorageKey = "model-overview.filters";
 
@@ -70,12 +83,6 @@ export const k_defaultViewPreferences: OverviewViewPreferences = {
   ranking: k_defaultRankingMode,
   collapsed: false,
 };
-
-export interface OverviewSearchState {
-  text: string;
-}
-
-export const k_defaultSearchState: OverviewSearchState = { text: "" };
 
 export interface OverviewFilters {
   freeOnly: boolean;
@@ -115,6 +122,76 @@ export function f_resolveCollapsedState(p_enabled: boolean, p_stored: boolean): 
   return p_enabled && p_stored;
 }
 
+/** A column description for the single-text table body. */
+export interface TableColumn {
+  readonly key: ModelSortKey;
+  readonly width: number;
+}
+
+/**
+ * `#rank score` when both exist; a lone value still renders. Proxy matches
+ * (version/family stand-ins) get a `~` prefix and are never shown as exact.
+ */
+function fh_benchmarkText(p_benchmark: ModelBenchmark | null): string {
+  if (p_benchmark === null) return "—";
+  const vl_parts: string[] = [];
+  if (p_benchmark.rank !== null) vl_parts.push(f_formatRank(p_benchmark.rank));
+  if (p_benchmark.score !== null) vl_parts.push(f_formatScore(p_benchmark.score));
+  if (vl_parts.length === 0) return "—";
+  const vl_text = vl_parts.join(" ");
+  const vl_isProxy =
+    p_benchmark.matchType === "version_proxy" || p_benchmark.matchType === "family_proxy";
+  return vl_isProxy ? `~${vl_text}` : vl_text;
+}
+
+/** One cell's display text for a row, keyed by its column. */
+function fh_tableCell(p_model: ModelRecord, p_key: ModelSortKey): string {
+  switch (p_key) {
+    case "name":
+      return p_model.name;
+    case "providerName":
+      return p_model.providerName;
+    case "contextWindow":
+      return f_formatContext(p_model.contextWindow);
+    case "inputPrice":
+      return f_formatPrice(p_model.pricing.inputUsdPerMillionTokens);
+    case "outputPrice":
+      return f_formatPrice(p_model.pricing.outputUsdPerMillionTokens);
+    case "gpqaRank":
+    case "gpqaScore":
+      return fh_benchmarkText(f_getBenchmarkForModel(p_model, "gpqa"));
+    case "livecodebenchRank":
+    case "livecodebenchScore":
+      return fh_benchmarkText(f_getBenchmarkForModel(p_model, "livecodebench"));
+    case "releaseDate":
+      return p_model.releaseDate ?? "—";
+  }
+}
+
+/**
+ * Render rows as fixed-width text lines for a single `<text>` node.
+ *
+ * The host's reconciler does not reliably reorder `<For>` children inside this
+ * panel (moves can silently no-op in scrollbox trees), so the table body is a
+ * plain text block: sorting/searching become in-place text updates, which
+ * always render. A leading space matches the header row's left padding.
+ */
+export function f_buildTableLines(
+  p_rows: readonly ModelRecord[],
+  p_columns: readonly TableColumn[],
+): string[] {
+  return p_rows.map(
+    (p_model) =>
+      ` ${p_columns
+        .map((p_column) =>
+          f_truncate(fh_tableCell(p_model, p_column.key), p_column.width).padEnd(
+            p_column.width,
+          ),
+        )
+        .join(" ")}`,
+  );
+}
+
 export interface OverviewDerivedRows {
   rows: readonly ModelRecord[];
   totalCount: number;
@@ -124,14 +201,14 @@ export interface OverviewDerivedRows {
 export type OverviewCommand =
   | { kind: "toggle" }
   | { kind: "status" }
-  | { kind: "refresh" }
-  | { kind: "sort"; key: ModelSortKey }
-  | { kind: "ranking"; ranking: RankingMode };
+  | { kind: "update" }
+  | { kind: "redraw" }
+  | { kind: "sort"; key: ModelSortKey };
 
-export const k_overviewUsage =
-  "/model-overview [toggle | status | refresh | sort <column> | ranking gpqa|livecodebench]";
+export const k_overviewUsage = "/mosp [toggle | status | update | redraw | sort <column>]";
 
 const k_sortTokenAliases: Readonly<Record<string, ModelSortKey>> = {
+  ctx: "contextWindow",
   gpqa: "gpqaRank",
   lcb: "livecodebenchRank",
   livecodebench: "livecodebenchRank",
@@ -141,7 +218,12 @@ const k_sortTokenAliases: Readonly<Record<string, ModelSortKey>> = {
 
 /** Numeric and date columns read best descending on first selection. */
 export function f_getDefaultSortDirection(p_key: ModelSortKey): SortDirection {
-  if (p_key === "releaseDate" || p_key === "gpqaScore" || p_key === "livecodebenchScore") {
+  if (
+    p_key === "releaseDate" ||
+    p_key === "gpqaScore" ||
+    p_key === "livecodebenchScore" ||
+    p_key === "contextWindow"
+  ) {
     return "desc";
   }
   return "asc";
@@ -167,38 +249,14 @@ export function f_nextSortState(
   return { sortKey: p_key, sortDirection: f_getDefaultSortDirection(p_key) };
 }
 
-/** Switch ranking; move the sort column when it belonged to the other benchmark. */
-export function f_nextRankingState(
-  p_preferences: OverviewViewPreferences,
-  p_ranking: RankingMode,
-): { ranking: RankingMode; sortKey: ModelSortKey; sortDirection: SortDirection } {
-  const vl_current = fh_benchmarkForSortKey(p_preferences.sortKey);
-  if (vl_current !== null && vl_current !== p_ranking) {
-    return {
-      ranking: p_ranking,
-      sortKey: p_ranking === "gpqa" ? "gpqaRank" : "livecodebenchRank",
-      sortDirection: "asc",
-    };
-  }
-  return {
-    ranking: p_ranking,
-    sortKey: p_preferences.sortKey,
-    sortDirection: p_preferences.sortDirection,
-  };
-}
-
 /** Map controller state onto the service-layer filter options. */
-export function f_buildFilterOptions(
-  p_search: OverviewSearchState,
-  p_filters: OverviewFilters,
-): ModelFilterOptions {
+export function f_buildFilterOptions(p_filters: OverviewFilters): ModelFilterOptions {
   const vl_presence: ModelFilterOptions["benchmarkPresence"] = p_filters.missingGpqa
     ? { scope: "gpqa", state: "missing" }
     : p_filters.missingLiveCodeBench
       ? { scope: "livecodebench", state: "missing" }
       : undefined;
   return {
-    searchText: p_search.text,
     freeOnly: p_filters.freeOnly,
     ...(vl_presence !== undefined ? { benchmarkPresence: vl_presence } : {}),
   };
@@ -208,10 +266,9 @@ export function f_buildFilterOptions(
 export function f_deriveOverviewRows(
   p_models: readonly ModelRecord[],
   p_preferences: OverviewViewPreferences,
-  p_search: OverviewSearchState,
   p_filters: OverviewFilters,
 ): OverviewDerivedRows {
-  const vl_filtered = f_filterModels(p_models, f_buildFilterOptions(p_search, p_filters));
+  const vl_filtered = f_filterModels(p_models, f_buildFilterOptions(p_filters));
   return {
     rows: f_sortModels(vl_filtered, p_preferences.sortKey, p_preferences.sortDirection),
     totalCount: p_models.length,
@@ -219,7 +276,7 @@ export function f_deriveOverviewRows(
   };
 }
 
-/** Parse the `/model-overview` argument string; `undefined` means "invalid". */
+/** Parse the `/mosp` argument string; `undefined` means "invalid". */
 export function f_parseOverviewCommand(p_raw: string): OverviewCommand | undefined {
   const vl_tokens = p_raw
     .trim()
@@ -229,13 +286,11 @@ export function f_parseOverviewCommand(p_raw: string): OverviewCommand | undefin
   const [vl_head, vl_target] = vl_tokens;
   if (vl_head === undefined || vl_head === "toggle") return { kind: "toggle" };
   if (vl_head === "status") return { kind: "status" };
-  if (vl_head === "refresh") return { kind: "refresh" };
+  if (vl_head === "update") return { kind: "update" };
+  if (vl_head === "redraw") return { kind: "redraw" };
   if (vl_head === "sort" && vl_target !== undefined) {
     const vl_key = fh_resolveSortToken(vl_target);
     return vl_key !== undefined ? { kind: "sort", key: vl_key } : undefined;
-  }
-  if (vl_head === "ranking" && (vl_target === "gpqa" || vl_target === "livecodebench")) {
-    return { kind: "ranking", ranking: vl_target };
   }
   return undefined;
 }
@@ -261,6 +316,8 @@ export function f_getSortKeyLabel(p_key: ModelSortKey): string {
     case "livecodebenchRank":
     case "livecodebenchScore":
       return "LCB";
+    case "contextWindow":
+      return "Ctx";
     case "inputPrice":
       return "In $/M";
     case "outputPrice":
@@ -296,7 +353,7 @@ export function f_buildStatusLine(
 ): string {
   if (p_lastError !== null) return `error: ${p_lastError}`;
   if (p_snapshot === undefined) {
-    return p_loading ? "refreshing…" : "no cached data — run /model-overview refresh";
+    return p_loading ? "refreshing…" : "no cached data — run /mosp update";
   }
   const vl_sources = p_snapshot.status.sources
     .map((p_source) => `${fh_shortSource(p_source.source)}: ${p_source.state}`)
@@ -312,7 +369,6 @@ export function f_buildStatusLines(
   p_snapshot: ModelOverviewSnapshot | undefined,
   p_rows: OverviewDerivedRows,
   p_preferences: OverviewViewPreferences,
-  p_searchText: string,
   p_filters: OverviewFilters,
   p_loading: boolean,
   p_lastError: string | null,
@@ -323,9 +379,7 @@ export function f_buildStatusLines(
     `sort: ${f_getSortKeyLabel(p_preferences.sortKey)} ${p_preferences.sortDirection === "asc" ? "ascending" : "descending"} · ranking: ${p_preferences.ranking === "gpqa" ? "GPQA" : "LiveCodeBench"}`,
   );
   vl_lines.push(`models: ${p_rows.filteredCount} of ${p_rows.totalCount} shown`);
-  vl_lines.push(
-    `search: ${p_searchText.trim() === "" ? "(none)" : p_searchText.trim()} · filters: ${fh_describeFilters(p_filters)}`,
-  );
+  vl_lines.push(`filters: ${fh_describeFilters(p_filters)}`);
   if (p_snapshot !== undefined) {
     for (const vl_source of p_snapshot.status.sources) {
       const vl_error = vl_source.error !== null ? ` (${vl_source.error})` : "";
@@ -359,16 +413,21 @@ export function f_buildSidebarSummary(
   return `${p_total} models · ${vl_label} ${vl_rank} ${f_truncate(p_leader.name, 18)} ${vl_score}`;
 }
 
-/** Short snapshot description for refresh toasts. */
+/** Short snapshot description for update toasts. */
 export function f_describeSnapshot(p_snapshot: ModelOverviewSnapshot): string {
   return `${p_snapshot.status.state} · ${p_snapshot.models.length} models · ${p_snapshot.warnings.length} warning(s)`;
 }
 
 export interface OverviewController {
   readonly cache: OverviewCache;
-  readonly preferences: Store<OverviewViewPreferences>;
-  readonly search: Store<OverviewSearchState>;
-  readonly filters: Store<OverviewFilters>;
+  /** Controller-owned reactive state — the only source used for rendering. */
+  readonly sortKey: Accessor<ModelSortKey>;
+  readonly sortDirection: Accessor<SortDirection>;
+  readonly ranking: Accessor<RankingMode>;
+  readonly collapsed: Accessor<boolean>;
+  readonly filters: Accessor<OverviewFilters>;
+  /** Plain snapshot of the current prefs (status dialogs, derivations). */
+  readonly preferences: () => OverviewViewPreferences;
   readonly snapshot: Accessor<ModelOverviewSnapshot | undefined>;
   readonly loading: Accessor<boolean>;
   readonly lastError: Accessor<string | null>;
@@ -376,40 +435,53 @@ export interface OverviewController {
   readonly rankingLeader: Accessor<ModelRecord | null>;
   /** Whether header-click collapse is enabled (env-gated, default off). */
   readonly headerCollapseEnabled: boolean;
-  readonly setSearchText: (p_text: string) => void;
   readonly toggleFreeOnly: () => void;
   readonly toggleMissingGpqa: () => void;
   readonly toggleMissingLiveCodeBench: () => void;
   readonly clearFilters: () => void;
   readonly toggleSort: (p_key: ModelSortKey) => void;
-  readonly setRanking: (p_ranking: RankingMode) => void;
   readonly toggleCollapsed: () => void;
   readonly loadFromCache: () => Promise<void>;
   readonly refresh: (p_force: boolean) => Promise<ModelOverviewSnapshot | undefined>;
 }
 
-/** Build the controller bound to a host `Plugin.Context`. */
-export function f_createOverviewController(p_context: Plugin.Context): OverviewController {
+/** Build the controller bound to a host `Plugin.Context` and its panel name. */
+export function f_createOverviewController(
+  p_context: Plugin.Context,
+  p_panelName: string,
+): OverviewController {
   const vl_cache = f_createFileCache(f_getDefaultCacheDirectory());
   const vl_headerCollapseEnabled = f_resolveHeaderCollapseEnabled();
+
+  // Host stores: persistence only (write-through + one-time read), because our
+  // Solid instance cannot observe host-created stores. See module header.
   const [vl_preferences, vl_setPreferences] = p_context.storage.store<OverviewViewPreferences>(
     k_preferencesStorageKey,
     { initial: { ...k_defaultViewPreferences } },
   );
-  const [vl_search, vl_setSearch] = p_context.storage.memory<OverviewSearchState>(
-    k_searchStorageKey,
-    { initial: { ...k_defaultSearchState } },
-  );
-  const [vl_filters, vl_setFilters] = p_context.storage.memory<OverviewFilters>(
+  const [vl_filtersStore, vl_setFiltersStore] = p_context.storage.memory<OverviewFilters>(
     k_filtersStorageKey,
     { initial: { ...k_defaultFilters } },
   );
 
-  // Fold a legacy/partial stored shape back to defaults exactly once.
+  // Resolve initial values once, folding legacy/partial shapes back to defaults.
   const vl_storedSortKey: unknown = vl_preferences.sortKey;
   const vl_storedSortDirection: unknown = vl_preferences.sortDirection;
   const vl_storedRanking: unknown = vl_preferences.ranking;
   const vl_storedCollapsed: unknown = vl_preferences.collapsed;
+  const vl_initialSortKey: ModelSortKey = f_isModelSortKey(vl_storedSortKey)
+    ? vl_storedSortKey
+    : k_defaultSortKey;
+  const vl_initialSortDirection: SortDirection = f_isSortDirection(vl_storedSortDirection)
+    ? vl_storedSortDirection
+    : k_defaultSortDirection;
+  const vl_initialRanking: RankingMode = f_isRankingMode(vl_storedRanking)
+    ? vl_storedRanking
+    : k_defaultRankingMode;
+  const vl_initialCollapsed = f_resolveCollapsedState(
+    vl_headerCollapseEnabled,
+    typeof vl_storedCollapsed === "boolean" ? vl_storedCollapsed : false,
+  );
   if (
     !f_isModelSortKey(vl_storedSortKey) ||
     !f_isSortDirection(vl_storedSortDirection) ||
@@ -418,88 +490,154 @@ export function f_createOverviewController(p_context: Plugin.Context): OverviewC
     (!vl_headerCollapseEnabled && vl_storedCollapsed === true)
   ) {
     void vl_setPreferences((draft) => {
-      draft.sortKey = f_isModelSortKey(vl_storedSortKey) ? vl_storedSortKey : k_defaultSortKey;
-      draft.sortDirection = f_isSortDirection(vl_storedSortDirection)
-        ? vl_storedSortDirection
-        : k_defaultSortDirection;
-      draft.ranking = f_isRankingMode(vl_storedRanking) ? vl_storedRanking : k_defaultRankingMode;
-      draft.collapsed = f_resolveCollapsedState(
-        vl_headerCollapseEnabled,
-        typeof vl_storedCollapsed === "boolean" ? vl_storedCollapsed : false,
-      );
+      draft.sortKey = vl_initialSortKey;
+      draft.sortDirection = vl_initialSortDirection;
+      draft.ranking = vl_initialRanking;
+      draft.collapsed = vl_initialCollapsed;
     });
   }
+  const vl_initialFilters: OverviewFilters = {
+    freeOnly: typeof vl_filtersStore.freeOnly === "boolean" ? vl_filtersStore.freeOnly : false,
+    missingGpqa: typeof vl_filtersStore.missingGpqa === "boolean" ? vl_filtersStore.missingGpqa : false,
+    missingLiveCodeBench:
+      typeof vl_filtersStore.missingLiveCodeBench === "boolean"
+        ? vl_filtersStore.missingLiveCodeBench
+        : false,
+  };
 
+  // Controller-owned signals: the rendering source of truth.
+  const [vl_sortKey, vl_setSortKey] = createSignal<ModelSortKey>(vl_initialSortKey);
+  const [vl_sortDirection, vl_setSortDirection] = createSignal<SortDirection>(
+    vl_initialSortDirection,
+  );
+  const [vl_ranking] = createSignal<RankingMode>(vl_initialRanking);
+  const [vl_collapsed, vl_setCollapsed] = createSignal<boolean>(vl_initialCollapsed);
+  const [vl_filters, vl_setFilters] = createSignal<OverviewFilters>(vl_initialFilters);
   const [vl_snapshot, vl_setSnapshot] = createSignal<ModelOverviewSnapshot | undefined>(undefined);
   const [vl_loading, vl_setLoading] = createSignal(false);
   const [vl_lastError, vl_setLastError] = createSignal<string | null>(null);
 
-  const vl_rows = createMemo(() =>
-    f_deriveOverviewRows(vl_snapshot()?.models ?? [], vl_preferences, vl_search, vl_filters),
-  );
+  const fh_preferencesSnapshot = (): OverviewViewPreferences => ({
+    sortKey: vl_sortKey(),
+    sortDirection: vl_sortDirection(),
+    ranking: vl_ranking(),
+    collapsed: vl_collapsed(),
+  });
+
+  const vl_rows = createMemo(() => {
+    const vl_derived = f_deriveOverviewRows(
+      vl_snapshot()?.models ?? [],
+      fh_preferencesSnapshot(),
+      vl_filters(),
+    );
+    return vl_derived;
+  });
   const vl_rankingLeader = createMemo(() => {
     const vl_models = vl_snapshot()?.models ?? [];
-    const vl_key: ModelSortKey =
-      vl_preferences.ranking === "gpqa" ? "gpqaRank" : "livecodebenchRank";
+    // Default to GPQA; follow the benchmark when a benchmark column is active.
+    const vl_benchmark = fh_benchmarkForSortKey(vl_sortKey()) ?? vl_ranking();
+    const vl_key: ModelSortKey = vl_benchmark === "gpqa" ? "gpqaRank" : "livecodebenchRank";
     return f_sortModels(vl_models, vl_key, "asc")[0] ?? null;
   });
 
-  function f_setSearchText(p_text: string): void {
-    void vl_setSearch((draft) => {
-      draft.text = p_text;
+  // The host never repaints a mounted plugin subtree (verified 2026-10-25:
+  // imperative node writes execute, but pixels only refresh on a new mount).
+  // Every mutation therefore paints through a fresh mount: coalesce repaint
+  // requests per microtask and remount the panel (close → open). Only repaints
+  // when THIS plugin's panel is the active one; `presentation: "panel"` matches
+  // the toggle path. See docs/architecture/ui-integration.md.
+  let vl_repaintQueued = false;
+
+  function fh_pokeRender(): void {
+    if (vl_repaintQueued) {
+      return;
+    }
+
+    vl_repaintQueued = true;
+    queueMicrotask(() => {
+      vl_repaintQueued = false;
+
+      const vl_current = p_context.ui.panel.current();
+
+      if (vl_current === undefined || vl_current.name !== p_panelName) {
+        return;
+      }
+
+      p_context.ui.panel.close();
+      p_context.ui.panel.open(p_panelName, { presentation: "panel" });
     });
   }
 
   function f_toggleFreeOnly(): void {
-    void vl_setFilters((draft) => {
-      draft.freeOnly = !draft.freeOnly;
+    const vl_next = !vl_filters().freeOnly;
+    vl_setFilters((p_current) => ({ ...p_current, freeOnly: vl_next }));
+    void vl_setFiltersStore((draft) => {
+      draft.freeOnly = vl_next;
     });
+    fh_pokeRender();
   }
 
   function f_toggleMissingGpqa(): void {
-    void vl_setFilters((draft) => {
-      draft.missingGpqa = !draft.missingGpqa;
-      if (draft.missingGpqa) draft.missingLiveCodeBench = false;
+    const vl_current = vl_filters();
+    const vl_nextEnabled = !vl_current.missingGpqa;
+    const vl_next: OverviewFilters = {
+      freeOnly: vl_current.freeOnly,
+      missingGpqa: vl_nextEnabled,
+      missingLiveCodeBench: vl_nextEnabled ? false : vl_current.missingLiveCodeBench,
+    };
+    vl_setFilters(vl_next);
+    void vl_setFiltersStore((draft) => {
+      draft.missingGpqa = vl_next.missingGpqa;
+      draft.missingLiveCodeBench = vl_next.missingLiveCodeBench;
     });
+    fh_pokeRender();
   }
 
   function f_toggleMissingLiveCodeBench(): void {
-    void vl_setFilters((draft) => {
-      draft.missingLiveCodeBench = !draft.missingLiveCodeBench;
-      if (draft.missingLiveCodeBench) draft.missingGpqa = false;
+    const vl_current = vl_filters();
+    const vl_nextEnabled = !vl_current.missingLiveCodeBench;
+    const vl_next: OverviewFilters = {
+      freeOnly: vl_current.freeOnly,
+      missingGpqa: vl_nextEnabled ? false : vl_current.missingGpqa,
+      missingLiveCodeBench: vl_nextEnabled,
+    };
+    vl_setFilters(vl_next);
+    void vl_setFiltersStore((draft) => {
+      draft.missingGpqa = vl_next.missingGpqa;
+      draft.missingLiveCodeBench = vl_next.missingLiveCodeBench;
     });
+    fh_pokeRender();
   }
 
   function f_clearFilters(): void {
-    void vl_setFilters((draft) => {
+    vl_setFilters({ ...k_defaultFilters });
+    void vl_setFiltersStore((draft) => {
       draft.freeOnly = false;
       draft.missingGpqa = false;
       draft.missingLiveCodeBench = false;
     });
+    fh_pokeRender();
   }
 
   function f_toggleSort(p_key: ModelSortKey): void {
+    const vl_next = f_nextSortState(fh_preferencesSnapshot(), p_key);
+    vl_setSortKey(vl_next.sortKey);
+    vl_setSortDirection(vl_next.sortDirection);
     void vl_setPreferences((draft) => {
-      const vl_next = f_nextSortState(draft, p_key);
       draft.sortKey = vl_next.sortKey;
       draft.sortDirection = vl_next.sortDirection;
     });
-  }
-
-  function f_setRanking(p_ranking: RankingMode): void {
-    void vl_setPreferences((draft) => {
-      const vl_next = f_nextRankingState(draft, p_ranking);
-      draft.ranking = vl_next.ranking;
-      draft.sortKey = vl_next.sortKey;
-      draft.sortDirection = vl_next.sortDirection;
-    });
+    fh_pokeRender();
   }
 
   function f_toggleCollapsed(): void {
     if (!vl_headerCollapseEnabled) return;
+    const vl_next = !vl_collapsed();
+    vl_setCollapsed(vl_next);
     void vl_setPreferences((draft) => {
-      draft.collapsed = !draft.collapsed;
+      draft.collapsed = vl_next;
     });
+    fh_pokeRender();
   }
 
   async function fh_loadModels(
@@ -547,8 +685,10 @@ export function f_createOverviewController(p_context: Plugin.Context): OverviewC
   async function f_loadFromCache(): Promise<void> {
     try {
       vl_setSnapshot(await f_getModelOverview({ cache: vl_cache }));
+      fh_pokeRender();
     } catch {
       vl_setLastError("cache read failed");
+      fh_pokeRender();
     }
   }
 
@@ -576,27 +716,29 @@ export function f_createOverviewController(p_context: Plugin.Context): OverviewC
       return vl_snapshot();
     } finally {
       vl_setLoading(false);
+      fh_pokeRender();
     }
   }
 
   return {
     cache: vl_cache,
-    preferences: vl_preferences,
-    search: vl_search,
+    sortKey: vl_sortKey,
+    sortDirection: vl_sortDirection,
+    ranking: vl_ranking,
+    collapsed: vl_collapsed,
     filters: vl_filters,
+    preferences: fh_preferencesSnapshot,
     snapshot: vl_snapshot,
     loading: vl_loading,
     lastError: vl_lastError,
     rows: vl_rows,
     rankingLeader: vl_rankingLeader,
     headerCollapseEnabled: vl_headerCollapseEnabled,
-    setSearchText: f_setSearchText,
     toggleFreeOnly: f_toggleFreeOnly,
     toggleMissingGpqa: f_toggleMissingGpqa,
     toggleMissingLiveCodeBench: f_toggleMissingLiveCodeBench,
     clearFilters: f_clearFilters,
     toggleSort: f_toggleSort,
-    setRanking: f_setRanking,
     toggleCollapsed: f_toggleCollapsed,
     loadFromCache: f_loadFromCache,
     refresh: f_refresh,

@@ -167,6 +167,9 @@ function fh_getSortValue(
     case "releaseDate":
       return p_model.releaseDate;
 
+    case "contextWindow":
+      return p_model.contextWindow;
+
     case "inputPrice":
       return p_model.pricing.inputUsdPerMillionTokens;
 

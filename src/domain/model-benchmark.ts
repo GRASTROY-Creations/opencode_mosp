@@ -45,6 +45,36 @@ export const k_gpqaVariant = "gpqa_diamond";
 /** LiveCodeBench generation-leaderboard snapshot (pass@1 over a date window). */
 export const k_livecodebenchVariant = "generation";
 
+/**
+ * How a benchmark row relates to a registry model.
+ *
+ * `exact`/`alias` describe the model itself; `version_proxy`/`family_proxy`
+ * describe a sibling version/family entry used as a stand-in and must never be
+ * presented as the model's own score (the UI marks those rows with `~`).
+ */
+export type BenchmarkMatchType = "exact" | "alias" | "version_proxy" | "family_proxy";
+
+export const k_benchmarkMatchTypes: readonly BenchmarkMatchType[] = [
+  "exact",
+  "alias",
+  "version_proxy",
+  "family_proxy",
+];
+
+export function f_isBenchmarkMatchType(p_value: unknown): p_value is BenchmarkMatchType {
+  return k_benchmarkMatchTypes.some((p_type) => p_type === p_value);
+}
+
+function fh_parseNullableMatchType(
+  p_value: unknown,
+  p_field: string,
+): DomainResult<BenchmarkMatchType | null> {
+  if (p_value === null || p_value === undefined) {
+    return f_ok(null);
+  }
+  return f_parseEnum(p_value, k_benchmarkMatchTypes, p_field);
+}
+
 /** One normalized benchmark result for one model. */
 export interface ModelBenchmark {
   readonly benchmarkId: BenchmarkId;
@@ -63,6 +93,12 @@ export interface ModelBenchmark {
   readonly windowEnd: string | null;
   /** Raw identifier used by the benchmark source (for troubleshooting/aliases). */
   readonly sourceModelId: string | null;
+  /**
+   * How this row was tied to a registry model. Sources create rows with `null`;
+   * the matcher assigns the kind on attach. Older cached rows validate back to
+   * `null`.
+   */
+  readonly matchType: BenchmarkMatchType | null;
   /** Public result page or data file; `null` if unavailable. */
   readonly sourceUrl: string | null;
   /** When the evaluation was published; `null` when the source omits it. */
@@ -174,6 +210,12 @@ export function f_validateModelBenchmark(
     return vl_sourceModelId;
   }
 
+  const vl_matchType = fh_parseNullableMatchType(p_value.matchType, "benchmark.matchType");
+
+  if (!vl_matchType.ok) {
+    return vl_matchType;
+  }
+
   const vl_sourceUrl = f_parseNullableHttpUrl(
     p_value.sourceUrl,
     "benchmark.sourceUrl",
@@ -202,6 +244,7 @@ export function f_validateModelBenchmark(
     windowStart: vl_windowStart.value,
     windowEnd: vl_windowEnd.value,
     sourceModelId: vl_sourceModelId.value,
+    matchType: vl_matchType.value,
     sourceUrl: vl_sourceUrl.value,
     evaluatedAt: vl_evaluatedAt.value,
   });

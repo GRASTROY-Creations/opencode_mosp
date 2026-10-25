@@ -253,6 +253,20 @@ describe("benchmark contract", () => {
     expect(vl_benchmark.scoreUnit).toBe("percent");
   });
 
+  test("defaults matchType to null and accepts reviewed kinds", () => {
+    const vl_benchmark = fh_unwrap(f_validateModelBenchmark(k_validBenchmark));
+    expect(vl_benchmark.matchType).toBeNull();
+
+    const vl_proxy = fh_unwrap(
+      f_validateModelBenchmark({ ...k_validBenchmark, matchType: "family_proxy" }),
+    );
+    expect(vl_proxy.matchType).toBe("family_proxy");
+
+    expect(
+      f_validateModelBenchmark({ ...k_validBenchmark, matchType: "guessed" }).ok,
+    ).toBe(false);
+  });
+
   test("treats zero as a real score and null rank as unranked", () => {
     const vl_zero = fh_unwrap(
       f_validateModelBenchmark({

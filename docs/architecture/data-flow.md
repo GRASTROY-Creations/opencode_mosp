@@ -42,19 +42,27 @@ usable.
 
 Benchmark rows are matched independently, in this order: exact
 `<providerId>/<modelId>` key, exact `modelId`, exact `canonicalId`, reviewed
-alias, then conservative normalization (trim, lowercase, `_` → `-` only).
-Provider prefixes, version suffixes, and punctuation are not stripped
-automatically.
+alias, reviewed benchmark mapping (`src/config/benchmark-mappings.ts`, exact
+source-ID lookup per benchmark), then conservative normalization (trim,
+lowercase, `_` → `-` only). Provider prefixes, version suffixes, and
+punctuation are not stripped automatically.
 
 - A strategy that resolves to more than one model is recorded as `ambiguous`;
   matching stops there and never falls through to a looser strategy.
-- A reviewed alias whose target is absent, a row without a source ID, and a
-  duplicate benchmark for a model are all recorded as unmatched.
+- A reviewed alias whose target is absent, a reviewed mapping whose target is
+  absent (`mapping-target-missing`), a row without a source ID, and a duplicate
+  benchmark for a model are all recorded as unmatched.
 - Existing benchmark rows are never overwritten.
-- `src/config/model-aliases.ts` is the reviewed registry. It is intentionally
-  empty for the 2026-10-24 catalog because no benchmark row corresponds to a
-  current registry model; the service accepts an injected registry for tests
-  and future reviewed mappings.
+- `src/config/model-aliases.ts` and `src/config/benchmark-mappings.ts` are the
+  reviewed registries. Both are intentionally empty for the 2026-10-25 catalog:
+  no benchmark row corresponds to a current (largely anonymized) registry
+  model, and the KNOWLEDGE_04.md candidate table attached ZERO rows when
+  validated against the live sources. The service accepts injected registries
+  for tests and future reviewed mappings.
+- Every attached row records a `matchType`: mapping entries carry their own
+  kind (`alias`, `version_proxy`, `family_proxy`); legacy strategies attach as
+  `exact`, reviewed aliases as `alias`. `version_proxy`/`family_proxy` cells
+  render with a `~` prefix and are never presented as the model's own score.
 
 ## Ranking and filtering
 

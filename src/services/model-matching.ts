@@ -6,7 +6,8 @@
  * 2. exact model ID (`modelId`);
  * 3. exact canonical ID;
  * 4. reviewed aliases;
- * 5. conservative normalized model/canonical IDs.
+ * 5. reviewed benchmark mappings (source id -> registry id, per benchmark);
+ * 6. conservative normalized model/canonical IDs.
  *
  * A strategy that resolves to more than one model is ambiguous and recorded as
  * unmatched. It never falls through to a looser strategy, because doing so
@@ -14,12 +15,17 @@
  */
 
 import {
+  k_benchmarkMappings,
+  type BenchmarkMapping,
+} from "../config/benchmark-mappings";
+import {
   k_modelAliases,
   type ModelAlias,
 } from "../config/model-aliases";
 import {
   k_benchmarkIds,
   type BenchmarkId,
+  type BenchmarkMatchType,
   type ModelBenchmark,
 } from "../domain/model-benchmark";
 import type { ModelRecord } from "../domain/model-record";
@@ -30,6 +36,7 @@ export type MatchStrategy =
   | "exact-model-id"
   | "canonical-id"
   | "alias"
+  | "mapping"
   | "normalized";
 
 /** Why a benchmark row could not be attached to a model. */
@@ -38,6 +45,7 @@ export type MatchFailureReason =
   | "no-match"
   | "ambiguous"
   | "alias-target-missing"
+  | "mapping-target-missing"
   | "duplicate-benchmark";
 
 /** A benchmark row successfully attached during this match run. */
@@ -46,6 +54,8 @@ export interface BenchmarkMatch {
   /** Stable domain key of the target model. */
   readonly modelId: string;
   readonly strategy: MatchStrategy;
+  /** Relation kind recorded on the attached benchmark row. */
+  readonly matchType: BenchmarkMatchType;
 }
 
 /** A benchmark row that was deliberately left unattached. */
@@ -78,6 +88,8 @@ interface MatchResolution {
   readonly models: readonly ModelRecord[];
   readonly strategy: MatchStrategy;
   readonly aliasMatchedWithoutTarget: boolean;
+  readonly mappingMatchedWithoutTarget: boolean;
+  readonly matchType: BenchmarkMatchType | null;
 }
 
 const k_benchmarkOrder = new Map<BenchmarkId, number>(
@@ -101,8 +113,10 @@ export function f_matchBenchmarkRecords(
   p_models: readonly ModelRecord[],
   p_benchmarks: readonly ModelBenchmark[],
   p_aliases: readonly ModelAlias[] = k_modelAliases,
+  p_mappings: readonly BenchmarkMapping[] = k_benchmarkMappings,
 ): BenchmarkMatchResult {
   const vl_index = fh_indexModels(p_models);
+  const vl_mappingIndex = fh_indexMappings(p_mappings);
   const vl_benchmarksByModel = new Map<string, ModelBenchmark[]>();
   const vl_changedModels = new Set<string>();
   const vl_matches: BenchmarkMatch[] = [];
@@ -121,9 +135,11 @@ export function f_matchBenchmarkRecords(
     }
 
     const vl_resolution = fh_resolveModel(
+      vl_benchmark.benchmarkId,
       vl_sourceModelId,
       vl_index,
       p_aliases,
+      vl_mappingIndex,
     );
 
     if (vl_resolution.aliasMatchedWithoutTarget) {
@@ -131,6 +147,15 @@ export function f_matchBenchmarkRecords(
         benchmarkId: vl_benchmark.benchmarkId,
         sourceModelId: vl_sourceModelId,
         reason: "alias-target-missing",
+      });
+      continue;
+    }
+
+    if (vl_resolution.mappingMatchedWithoutTarget) {
+      vl_unmatched.push({
+        benchmarkId: vl_benchmark.benchmarkId,
+        sourceModelId: vl_sourceModelId,
+        reason: "mapping-target-missing",
       });
       continue;
     }
@@ -182,13 +207,16 @@ export function f_matchBenchmarkRecords(
       continue;
     }
 
-    const vl_nextBenchmarks = [...vl_existing, vl_benchmark];
+    const vl_matchType = fh_matchTypeForResolution(vl_resolution);
+    const vl_attached: ModelBenchmark = { ...vl_benchmark, matchType: vl_matchType };
+    const vl_nextBenchmarks = [...vl_existing, vl_attached];
     vl_benchmarksByModel.set(vl_target.id, vl_nextBenchmarks);
     vl_changedModels.add(vl_target.id);
     vl_matches.push({
-      benchmark: vl_benchmark,
+      benchmark: vl_attached,
       modelId: vl_target.id,
       strategy: vl_resolution.strategy,
+      matchType: vl_matchType,
     });
   }
 
@@ -259,38 +287,28 @@ function fh_addToIndex(
 }
 
 function fh_resolveModel(
+  p_benchmarkId: BenchmarkId,
   p_sourceModelId: string,
   p_index: ModelIndex,
   p_aliases: readonly ModelAlias[],
+  p_mappingIndex: ReadonlyMap<string, BenchmarkMapping>,
 ): MatchResolution {
   const vl_exactId = p_index.byId.get(p_sourceModelId);
 
   if (vl_exactId !== undefined) {
-    return {
-      models: vl_exactId,
-      strategy: "exact-id",
-      aliasMatchedWithoutTarget: false,
-    };
+    return fh_resolution(vl_exactId, "exact-id");
   }
 
   const vl_exactModelId = p_index.byModelId.get(p_sourceModelId);
 
   if (vl_exactModelId !== undefined) {
-    return {
-      models: vl_exactModelId,
-      strategy: "exact-model-id",
-      aliasMatchedWithoutTarget: false,
-    };
+    return fh_resolution(vl_exactModelId, "exact-model-id");
   }
 
   const vl_canonical = p_index.byCanonicalId.get(p_sourceModelId);
 
   if (vl_canonical !== undefined) {
-    return {
-      models: vl_canonical,
-      strategy: "canonical-id",
-      aliasMatchedWithoutTarget: false,
-    };
+    return fh_resolution(vl_canonical, "canonical-id");
   }
 
   const vl_alias = fh_resolveAliases(p_sourceModelId, p_index, p_aliases);
@@ -300,24 +318,79 @@ function fh_resolveModel(
       models: vl_alias.models,
       strategy: "alias",
       aliasMatchedWithoutTarget: vl_alias.models.length === 0,
+      mappingMatchedWithoutTarget: false,
+      matchType: null,
+    };
+  }
+
+  const vl_mapping = p_mappingIndex.get(`${p_benchmarkId} ${p_sourceModelId}`);
+
+  if (vl_mapping !== undefined) {
+    const vl_targets = p_index.byId.get(vl_mapping.opencodeModelId) ?? [];
+
+    return {
+      models: vl_targets,
+      strategy: "mapping",
+      aliasMatchedWithoutTarget: false,
+      mappingMatchedWithoutTarget: vl_targets.length === 0,
+      matchType: vl_mapping.matchType,
     };
   }
 
   const vl_normalized = fh_resolveNormalized(p_sourceModelId, p_index);
 
   if (vl_normalized !== null) {
-    return {
-      models: vl_normalized,
-      strategy: "normalized",
-      aliasMatchedWithoutTarget: false,
-    };
+    return fh_resolution(vl_normalized, "normalized");
   }
 
+  return fh_resolution([], "normalized");
+}
+
+function fh_resolution(
+  p_models: readonly ModelRecord[],
+  p_strategy: MatchStrategy,
+): MatchResolution {
   return {
-    models: [],
-    strategy: "normalized",
+    models: p_models,
+    strategy: p_strategy,
     aliasMatchedWithoutTarget: false,
+    mappingMatchedWithoutTarget: false,
+    matchType: null,
   };
+}
+
+function fh_indexMappings(
+  p_mappings: readonly BenchmarkMapping[],
+): ReadonlyMap<string, BenchmarkMapping> {
+  const vl_index = new Map<string, BenchmarkMapping>();
+  const vl_ambiguous = new Set<string>();
+
+  for (const vl_mapping of p_mappings) {
+    const vl_key = `${vl_mapping.benchmarkId} ${vl_mapping.sourceModelId}`;
+
+    if (vl_index.has(vl_key)) {
+      vl_ambiguous.add(vl_key);
+      continue;
+    }
+
+    vl_index.set(vl_key, vl_mapping);
+  }
+
+  for (const vl_key of vl_ambiguous) {
+    // Ambiguous reviewed data is worse than none: it would attach a score to
+    // the wrong model. Drop every entry for that key instead of guessing.
+    vl_index.delete(vl_key);
+  }
+
+  return vl_index;
+}
+
+function fh_matchTypeForResolution(p_resolution: MatchResolution): BenchmarkMatchType {
+  if (p_resolution.matchType !== null) {
+    return p_resolution.matchType;
+  }
+
+  return p_resolution.strategy === "alias" ? "alias" : "exact";
 }
 
 function fh_resolveAliases(
