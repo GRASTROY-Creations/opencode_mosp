@@ -7,22 +7,22 @@ import {
 } from "./test-models";
 
 const k_gpqaModel = f_createTestModel({
-  modelId: "gpqa-model",
+  modelId: "llbm-model",
   name: "Scored Model",
-  canonicalId: "canonical-gpqa",
+  canonicalId: "canonical-llbm",
   benchmarks: [
-    f_createTestBenchmark("gpqa", 80, { sourceModelId: "gpqa-model" }),
+    f_createTestBenchmark("llbm", 80, { sourceModelId: "llbm-model" }),
   ],
 });
 
 const k_lcbOnlyModel = f_createTestModel({
-  modelId: "lcb-only",
+  modelId: "llbm-only",
   name: "Coding Model",
   providerId: "other",
   providerName: "Other Provider",
   benchmarks: [
-    f_createTestBenchmark("livecodebench", 50, {
-      sourceModelId: "lcb-only",
+    f_createTestBenchmark("llbm", 50, {
+      sourceModelId: "llbm-only",
     }),
   ],
 });
@@ -97,20 +97,20 @@ describe("f_filterModels", () => {
     expect(f_filterModels([vl_tiered], { freeOnly: true })).toEqual([]);
   });
 
-  test("filters on GPQA presence and absence", () => {
+  test("filters on LLMBM presence and absence", () => {
     const vl_models = [k_gpqaModel, k_lcbOnlyModel, k_missingModel];
 
     expect(
       f_filterModels(vl_models, {
-        benchmarkPresence: { scope: "gpqa", state: "present" },
+        benchmarkPresence: { scope: "llbm", state: "present" },
       }).map((p_model) => p_model.modelId),
-    ).toEqual(["gpqa-model"]);
+    ).toEqual(["llbm-model", "llbm-only"]);
 
     expect(
       f_filterModels(vl_models, {
-        benchmarkPresence: { scope: "gpqa", state: "missing" },
+        benchmarkPresence: { scope: "llbm", state: "missing" },
       }).map((p_model) => p_model.modelId),
-    ).toEqual(["lcb-only", "missing-model"]);
+    ).toEqual(["missing-model"]);
   });
 
   test("filters on any benchmark presence", () => {
@@ -127,7 +127,7 @@ describe("f_filterModels", () => {
     const vl_nullScore = f_createTestModel({
       modelId: "null-score",
       benchmarks: [
-        f_createTestBenchmark("gpqa", null, {
+        f_createTestBenchmark("llbm", null, {
           sourceModelId: "null-score",
         }),
       ],
@@ -135,7 +135,7 @@ describe("f_filterModels", () => {
 
     expect(
       f_filterModels([vl_nullScore], {
-        benchmarkPresence: { scope: "gpqa", state: "present" },
+        benchmarkPresence: { scope: "llbm", state: "present" },
       }),
     ).toEqual([]);
   });
@@ -146,9 +146,9 @@ describe("f_filterModels", () => {
     expect(
       f_filterModels(vl_models, {
         providerIds: ["other"],
-        benchmarkPresence: { scope: "livecodebench", state: "present" },
+        benchmarkPresence: { scope: "llbm", state: "present" },
       }).map((p_model) => p_model.modelId),
-    ).toEqual(["lcb-only"]);
+    ).toEqual(["llbm-only"]);
   });
 
   test("does not mutate the input array", () => {

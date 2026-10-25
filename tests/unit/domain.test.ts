@@ -13,7 +13,7 @@ import {
   f_findBenchmark,
   f_validateModelBenchmark,
   k_benchmarkIds,
-  k_gpqaVariant,
+  k_llbmMetric,
 } from "../../src/domain/model-benchmark";
 import {
   f_createUnavailablePricing,
@@ -64,8 +64,8 @@ const k_validPricing = {
 } as const;
 
 const k_validBenchmark = {
-  benchmarkId: "gpqa",
-  variant: k_gpqaVariant,
+  benchmarkId: "llbm",
+  variant: k_llbmMetric,
   score: 72.5,
   scoreUnit: "percent",
   rank: 1,
@@ -125,10 +125,10 @@ describe("domain guards", () => {
 
   test("parses only members of the allowed string union", () => {
     const vl_enum = fh_unwrap(
-      f_parseEnum("gpqa", k_benchmarkIds, "benchmarkId"),
+      f_parseEnum("llbm", k_benchmarkIds, "benchmarkId"),
     );
 
-    expect(vl_enum).toBe("gpqa");
+    expect(vl_enum).toBe("llbm");
     expect(f_parseEnum("other", k_benchmarkIds, "benchmarkId").ok).toBe(false);
   });
 
@@ -249,7 +249,7 @@ describe("benchmark contract", () => {
 
     expect(vl_benchmark.score).toBe(72.5);
     expect(vl_benchmark.rank).toBe(1);
-    expect(vl_benchmark.variant).toBe(k_gpqaVariant);
+    expect(vl_benchmark.variant).toBe(k_llbmMetric);
     expect(vl_benchmark.scoreUnit).toBe("percent");
   });
 
@@ -258,9 +258,9 @@ describe("benchmark contract", () => {
     expect(vl_benchmark.matchType).toBeNull();
 
     const vl_proxy = fh_unwrap(
-      f_validateModelBenchmark({ ...k_validBenchmark, matchType: "family_proxy" }),
+      f_validateModelBenchmark({ ...k_validBenchmark, matchType: "family_fallback" }),
     );
-    expect(vl_proxy.matchType).toBe("family_proxy");
+    expect(vl_proxy.matchType).toBe("family_fallback");
 
     expect(
       f_validateModelBenchmark({ ...k_validBenchmark, matchType: "guessed" }).ok,
@@ -278,8 +278,8 @@ describe("benchmark contract", () => {
 
     expect(vl_zero.score).toBe(0);
     expect(vl_zero.rank).toBeNull();
-    expect(f_findBenchmark([vl_zero], "gpqa")?.score).toBe(0);
-    expect(f_findBenchmark([vl_zero], "livecodebench")).toBeNull();
+    expect(f_findBenchmark([vl_zero], "llbm")?.score).toBe(0);
+    expect(f_findBenchmark([vl_zero], "llbm")?.rank).toBeNull();
   });
 
   test("rejects scores outside 0-100 and malformed ranks", () => {
@@ -319,12 +319,10 @@ describe("benchmark contract", () => {
     ).toBe(false);
   });
 
-  test("keeps LiveCodeBench window and sample metadata", () => {
+  test("keeps LLMBM window and sample metadata", () => {
     const vl_benchmark = fh_unwrap(
       f_validateModelBenchmark({
         ...k_validBenchmark,
-        benchmarkId: "livecodebench",
-        variant: "generation",
         score: 49.55,
         rank: null,
         sampleCount: 1055,
@@ -352,8 +350,8 @@ describe("model record contract", () => {
     expect(vl_record.id).toBe("opencode/gpt-5-nano");
     expect(vl_record.pricing.inputUsdPerMillionTokens).toBe(0.1);
     expect(vl_record.benchmarks).toHaveLength(1);
-    expect(f_getBenchmarkForModel(vl_record, "gpqa")?.score).toBe(72.5);
-    expect(f_getBenchmarkForModel(vl_record, "livecodebench")).toBeNull();
+    expect(f_getBenchmarkForModel(vl_record, "llbm")?.score).toBe(72.5);
+    expect(f_getBenchmarkForModel(vl_record, "llbm")?.benchmarkId).toBe("llbm");
   });
 
   test("accepts a model with no price and no benchmark results", () => {
@@ -370,7 +368,7 @@ describe("model record contract", () => {
 
     expect(vl_record.pricing.inputUsdPerMillionTokens).toBeNull();
     expect(vl_record.benchmarks).toHaveLength(0);
-    expect(f_getBenchmarkForModel(vl_record, "gpqa")).toBeNull();
+    expect(f_getBenchmarkForModel(vl_record, "llbm")).toBeNull();
   });
 
   test("rejects duplicate benchmark entries", () => {
@@ -379,7 +377,7 @@ describe("model record contract", () => {
         ...k_validModel,
         benchmarks: [
           k_validBenchmark,
-          { ...k_validBenchmark, variant: "gpqa_diamond_with_tools" },
+          { ...k_validBenchmark, variant: "llbm-coding" },
         ],
       }).ok,
     ).toBe(false);
@@ -406,9 +404,9 @@ describe("model record contract", () => {
 
 describe("sort vocabulary", () => {
   test("exposes the specification defaults", () => {
-    expect(k_defaultSortKey).toBe("gpqaRank");
+    expect(k_defaultSortKey).toBe("llbmRank");
     expect(k_defaultSortDirection).toBe("asc");
-    expect(k_defaultRankingMode).toBe("gpqa");
+    expect(k_defaultRankingMode).toBe("llbm");
   });
 
   test("guards every supported value and rejects unknown ones", () => {
@@ -417,9 +415,9 @@ describe("sort vocabulary", () => {
     }
 
     expect(f_isModelSortKey("gpqa")).toBe(false);
-    expect(f_isRankingMode("gpqa")).toBe(true);
-    expect(f_isRankingMode("livecodebench")).toBe(true);
-    expect(f_isRankingMode("gpqaScore")).toBe(false);
+    expect(f_isRankingMode("llbm")).toBe(true);
+    expect(f_isRankingMode("gpqa")).toBe(false);
+    expect(f_isRankingMode("llbmScore")).toBe(false);
     expect(f_isSortDirection("asc")).toBe(true);
     expect(f_isSortDirection("desc")).toBe(true);
     expect(f_isSortDirection("up")).toBe(false);

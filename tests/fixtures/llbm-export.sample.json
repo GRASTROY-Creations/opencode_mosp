@@ -1,0 +1,213 @@
+{
+  "dataset": {
+    "models": [
+      {
+        "id": "google/gemini-3.8-flash",
+        "slug": "gemini-3-8-flash",
+        "name": "Google: Gemini 3.8 Flash",
+        "provider": "google",
+        "contextLength": 1048576,
+        "pricing": {
+          "inputPerM": 0.75,
+          "outputPerM": 3.75,
+          "basis": "maker",
+          "providerCount": 3,
+          "minOutputPerM": 3.75,
+          "minInputPerM": 0.75
+        },
+        "releasedAt": "2026-09-02",
+        "huggingFaceId": null,
+        "profile": {
+          "description": "Gemini 3.8 Flash is Google's most intelligent Flash model with significant gains from 3.7 Flash across software engineering, agentic tasks, and multi-step reasoning.",
+          "inputModalities": [
+            "text",
+            "image",
+            "video",
+            "file",
+            "audio"
+          ],
+          "outputModalities": [
+            "text"
+          ],
+          "features": [
+            "reasoning",
+            "json-mode",
+            "structured-outputs",
+            "tools"
+          ],
+          "maxOutput": 65536,
+          "knowledgeCutoff": null,
+          "cacheReadPerM": 0.0825,
+          "cacheWritePerM": 0.041667,
+          "reasoningPerM": 4.125,
+          "webSearchPerRequest": 0.014,
+          "tokenizer": "Gemini",
+          "moderated": false,
+          "expiresAt": null,
+          "canonicalSlug": "google/gemini-3.8-flash-20260902"
+        }
+      },
+      {
+        "id": "z-ai/glm-5.3",
+        "slug": "glm-5-3",
+        "name": "Z.ai: GLM 5.3",
+        "provider": "z-ai",
+        "contextLength": 1048576,
+        "pricing": {
+          "inputPerM": 1.4,
+          "outputPerM": 4.4,
+          "basis": "maker",
+          "providerCount": 45,
+          "minOutputPerM": 1.4,
+          "minInputPerM": 0.079
+        },
+        "releasedAt": "2026-08-18",
+        "huggingFaceId": "zai-org/GLM-5.3",
+        "profile": {
+          "description": "GLM-5.3 is a large-scale reasoning model from Z.ai, built for complex software engineering and long-horizon agent tasks. It supports text input and output with a 1M-token context window, and improves...",
+          "inputModalities": [
+            "text"
+          ],
+          "outputModalities": [
+            "text"
+          ],
+          "features": [
+            "reasoning",
+            "json-mode",
+            "structured-outputs",
+            "tools"
+          ],
+          "maxOutput": 943718,
+          "knowledgeCutoff": null,
+          "cacheReadPerM": 0.078,
+          "cacheWritePerM": null,
+          "reasoningPerM": null,
+          "webSearchPerRequest": null,
+          "tokenizer": null,
+          "moderated": false,
+          "expiresAt": null,
+          "canonicalSlug": "z-ai/glm-5.3-20260816"
+        }
+      },
+      {
+        "id": "nvidia/nemotron-3.5-lightning",
+        "slug": "nvidia-nemotron-3-5-lightning",
+        "name": "NVIDIA: Nemotron 3.5 Lightning",
+        "provider": "nvidia",
+        "contextLength": 262144,
+        "pricing": {
+          "inputPerM": 0.05345,
+          "outputPerM": 0.147,
+          "basis": "median",
+          "providerCount": 4,
+          "minOutputPerM": 0.12,
+          "minInputPerM": 0.025
+        },
+        "releasedAt": "2026-08-11",
+        "huggingFaceId": "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16",
+        "profile": {
+          "description": "NVIDIA Nemotron 3.5 Lightning is an open mixture-of-experts model from NVIDIA, with 3B active parameters out of 30B total. It is suited for high-throughput agentic workloads and specialized tasks that...",
+          "inputModalities": [
+            "text"
+          ],
+          "outputModalities": [
+            "text"
+          ],
+          "features": [
+            "reasoning",
+            "json-mode",
+            "structured-outputs",
+            "tools"
+          ],
+          "maxOutput": 235929,
+          "knowledgeCutoff": null,
+          "cacheReadPerM": 0.04,
+          "cacheWritePerM": null,
+          "reasoningPerM": null,
+          "webSearchPerRequest": null,
+          "tokenizer": null,
+          "moderated": false,
+          "expiresAt": null,
+          "canonicalSlug": "nvidia/nemotron-3.5-lightning-20260807"
+        }
+      }
+    ],
+    "scores": [
+      {
+        "modelId": "google/gemini-3.8-flash",
+        "source": "artificialanalysis",
+        "metric": "aa_coding_index",
+        "value": 76.3,
+        "unit": "points",
+        "observedAt": "2026-10-25",
+        "sourceUrl": "https://artificialanalysis.ai/models"
+      },
+      {
+        "modelId": "z-ai/glm-5.3",
+        "source": "artificialanalysis",
+        "metric": "aa_coding_index",
+        "value": 74.8,
+        "unit": "points",
+        "observedAt": "2026-10-25",
+        "sourceUrl": "https://artificialanalysis.ai/models"
+      },
+      {
+        "modelId": "nvidia/nemotron-3.5-lightning",
+        "source": "artificialanalysis",
+        "metric": "aa_coding_index",
+        "value": 26.8,
+        "unit": "points",
+        "observedAt": "2026-10-25",
+        "sourceUrl": "https://artificialanalysis.ai/models"
+      },
+      {
+        "modelId": "openai/gpt-5.6-sol",
+        "source": "artificialanalysis",
+        "metric": "aa_coding_index",
+        "value": 77.4,
+        "unit": "points",
+        "observedAt": "2026-10-25",
+        "sourceUrl": "https://artificialanalysis.ai/models"
+      },
+      {
+        "modelId": "anthropic/claude-fable-5",
+        "source": "artificialanalysis",
+        "metric": "aa_coding_index",
+        "value": 76.5,
+        "unit": "points",
+        "observedAt": "2026-10-25",
+        "sourceUrl": "https://artificialanalysis.ai/models"
+      },
+      {
+        "modelId": "moonshotai/kimi-k2.6",
+        "source": "artificialanalysis",
+        "metric": "aa_coding_index",
+        "value": 61.8,
+        "unit": "points",
+        "observedAt": "2026-10-25",
+        "sourceUrl": "https://artificialanalysis.ai/models"
+      },
+      {
+        "modelId": "openai/gpt-5.6-sol",
+        "source": "fixture-duplicate",
+        "metric": "aa_coding_index",
+        "value": 69.7,
+        "unit": "points",
+        "observedAt": "2026-10-25",
+        "sourceUrl": "https://artificialanalysis.ai/models",
+        "setting": "Low"
+      },
+      {
+        "modelId": "moonshotai/kimi-k2.6",
+        "source": "matharena",
+        "metric": "matharena_expected_cost_usd",
+        "value": 2.5378,
+        "unit": "usd",
+        "observedAt": "2026-10-25",
+        "sourceUrl": "https://matharena.ai/",
+        "setting": "think"
+      }
+    ],
+    "generatedAt": "2026-10-25T04:16:17.448Z"
+  }
+}

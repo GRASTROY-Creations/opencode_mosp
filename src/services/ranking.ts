@@ -73,7 +73,8 @@ export function f_sortModels(
  * score skips positions (1, 1, 3). Ties are ordered by model ID only for
  * deterministic traversal; they still receive the same rank. A benchmark with
  * no score keeps `rank: null`. Existing source ranks are overwritten because
- * GPQA's published rank mixes subsets and is not usable for Diamond.
+ * published source ranks (the old GPQA table mixed subsets) are not trusted —
+ * LLMBM rows arrive with `rank: null` anyway.
  */
 export function f_assignBenchmarkRanks(
   p_models: readonly ModelRecord[],
@@ -176,17 +177,11 @@ function fh_getSortValue(
     case "outputPrice":
       return p_model.pricing.outputUsdPerMillionTokens;
 
-    case "gpqaScore":
-      return fh_getBenchmarkValue(p_model, "gpqa", "score");
+    case "llbmScore":
+      return fh_getBenchmarkValue(p_model, "llbm", "score");
 
-    case "gpqaRank":
-      return fh_getBenchmarkValue(p_model, "gpqa", "rank");
-
-    case "livecodebenchScore":
-      return fh_getBenchmarkValue(p_model, "livecodebench", "score");
-
-    case "livecodebenchRank":
-      return fh_getBenchmarkValue(p_model, "livecodebench", "rank");
+    case "llbmRank":
+      return fh_getBenchmarkValue(p_model, "llbm", "rank");
 
     default: {
       const vl_exhaustiveCheck: never = p_key;

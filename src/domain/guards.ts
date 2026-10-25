@@ -171,7 +171,7 @@ export function f_parseNullableNonNegativeInteger(
 
 /**
  * Parse a required timestamp. Accepts an ISO-8601 string or epoch
- * milliseconds (the formats used by the OpenCode registry and LiveCodeBench)
+ * milliseconds (the formats used by the OpenCode registry and LLMBM export)
  * and canonicalizes both to an ISO-8601 UTC string, so lexicographic and
  * chronological ordering agree.
  */

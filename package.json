@@ -17,6 +17,7 @@
     "test": "bun test",
     "test:watch": "bun test --watch",
     "validate:mappings": "bun scripts/validate-mappings.ts",
+    "generate:mappings": "bun scripts/generate-mappings.ts",
     "check": "bun run typecheck && bun run lint && bun run test"
   },
   "dependencies": {

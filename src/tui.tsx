@@ -70,8 +70,7 @@ const k_columns: readonly OverviewColumn[] = [
   { key: "contextWindow", label: "Ctx", width: 6 },
   { key: "inputPrice", label: "In $/M", width: 10 },
   { key: "outputPrice", label: "Out $/M", width: 10 },
-  { key: "gpqaRank", label: "GPQA", width: 11 },
-  { key: "livecodebenchRank", label: "LCB", width: 11 },
+  { key: "llbmRank", label: "LLMBM", width: 11 },
 ];
 
 /**
@@ -223,7 +222,6 @@ function SidebarStatus(props: { readonly controller: OverviewController }) {
   const vl_summary = f_buildSidebarSummary(
     props.controller.rankingLeader(),
     props.controller.snapshot()?.models.length ?? 0,
-    props.controller.ranking(),
   );
   const vl_panel = context.ui.panel.current() === undefined ? "closed" : "open";
   return (

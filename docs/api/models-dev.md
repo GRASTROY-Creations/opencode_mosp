@@ -45,7 +45,9 @@ benchmark mappings (source ID ↔ family ↔ registry ID).
 
 ## Mapping validation status (2026-10-25)
 
-- `k_benchmarkMappings` remains **empty** ("Defer mappings" decision).
+- Benchmark mappings moved to `src/config/llbm-mappings.ts` and were
+  **regenerated from the live LLMBM `/v1/export` scored set** on 2026-10-25
+  (37 of 82 catalog models matched; see `docs/api/llmbenchmark.md`).
 - KNOWLEDGE_06 candidate IDs checked against models.dev: all five `openai/*`
   model IDs exist (`gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo`, `o1`, `o3-mini`),
   but the anthropic/deepseek/google ID strings do **not** exist under those
@@ -54,9 +56,9 @@ benchmark mappings (source ID ↔ family ↔ registry ID).
   adopted.
 - Caveat: models.dev `opencode` entries are themselves rebranded
   (e.g. family `big-pickle`, `beam`), so the crosswalk unlocks mappings only
-  where a family/name matches a live benchmark source ID
-  (e.g. `opencode/kimi-k2.6` ↔ GPQA `moonshotai/Kimi-K2.6` after documented
-  org-prefix handling — which the matcher still requires as reviewed entries).
+  where a family/name matches a live benchmark source ID. The adopted LLMBM
+  mappings key on the exact LLMBM `modelId` tail (`opencode/glm-5.3` ↔
+  `z-ai/glm-5.3`), with `-free` siblings attached as `family_fallback`.
 
 ## Adapter
 

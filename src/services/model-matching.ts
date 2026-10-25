@@ -6,8 +6,8 @@
  * 2. exact model ID (`modelId`);
  * 3. exact canonical ID;
  * 4. reviewed aliases;
- * 5. reviewed benchmark mappings (source id -> registry id, per benchmark; exact
- *    string first, casefolded only when uniquely resolvable);
+ * 5. reviewed LLMBM mappings (source id -> registry id, exact string first,
+ *    family_fallback only when uniquely resolvable);
  * 6. conservative normalized model/canonical IDs.
  *
  * A strategy that resolves to more than one model is ambiguous and recorded as
@@ -16,13 +16,9 @@
  */
 
 import {
-  k_benchmarkMappings,
-  type BenchmarkMapping,
-} from "../config/benchmark-mappings";
-import {
-  k_modelAliases,
-  type ModelAlias,
-} from "../config/model-aliases";
+  k_llbmMappings,
+  type LlbmMapping,
+} from "../config/llbm-mappings";
 import {
   k_benchmarkIds,
   type BenchmarkId,
@@ -73,24 +69,27 @@ export interface BenchmarkMatchResult {
   readonly unmatched: readonly UnmatchedBenchmark[];
 }
 
-interface ModelIndex {
+interface _ModelIndex {
   readonly byId: ReadonlyMap<string, readonly ModelRecord[]>;
   readonly byModelId: ReadonlyMap<string, readonly ModelRecord[]>;
   readonly byCanonicalId: ReadonlyMap<string, readonly ModelRecord[]>;
   readonly byNormalizedId: ReadonlyMap<string, readonly ModelRecord[]>;
 }
 
-interface AliasResolution {
-  readonly matched: boolean;
-  readonly models: readonly ModelRecord[];
+interface _MappedTarget {
+  readonly opencodeId: string;
+  readonly matchType: "exact" | "family_fallback";
 }
 
-interface MatchResolution {
-  readonly models: readonly ModelRecord[];
-  readonly strategy: MatchStrategy;
-  readonly aliasMatchedWithoutTarget: boolean;
-  readonly mappingMatchedWithoutTarget: boolean;
-  readonly matchType: BenchmarkMatchType | null;
+/**
+ * Mapping lookup index: exact `sourceId` keys win; casefolded keys act as a
+ * fallback only when they resolve to a single distinct source string. When two
+ * entries claim the same source id, the exact mapping wins over a family
+ * fallback; two same-kind targets on one id are dropped rather than guessed.
+ */
+interface _MappingIndex {
+  readonly exact: ReadonlyMap<string, _MappedTarget>;
+  readonly folded: ReadonlyMap<string, _MappedTarget>;
 }
 
 const k_benchmarkOrder = new Map<BenchmarkId, number>(
@@ -107,17 +106,152 @@ export function f_normalizeModelId(p_modelId: string): string {
 }
 
 /**
- * Attach benchmark rows to models. Returns new records; the input array and
- * records are never mutated. Unmatched rows carry a reason for status display.
+ * Build the exact + folded mapping index from reviewed LLMBM mappings.
+ *
+ * Exact `sourceId` keys win; casefolded keys act as a fallback only when they
+ * resolve to a single distinct source string. On an exact-key conflict an
+ * exact mapping beats a family fallback; same-kind conflicts drop the key.
  */
+function fh_indexMappings(p_mappings: readonly LlbmMapping[]): _MappingIndex {
+  const vl_exact = new Map<string, _MappedTarget>();
+  const vl_exactAmbiguous = new Set<string>();
+
+  for (const vl_mapping of p_mappings) {
+    if (vl_mapping.llbmId === null) {
+      // No LLMBM identifier; nothing to index.
+      continue;
+    }
+
+    const vl_target: _MappedTarget = {
+      opencodeId: vl_mapping.opencodeId,
+      matchType: vl_mapping.matchType,
+    };
+
+    const vl_existing = vl_exact.get(vl_mapping.llbmId);
+
+    if (vl_existing === undefined) {
+      if (!vl_exactAmbiguous.has(vl_mapping.llbmId)) {
+        vl_exact.set(vl_mapping.llbmId, vl_target);
+      }
+      continue;
+    }
+
+    if (vl_existing.opencodeId === vl_target.opencodeId) {
+      // Same mapping listed twice; keep the first.
+      continue;
+    }
+
+    const vl_existingIsExact = vl_existing.matchType === "exact";
+    const vl_candidateIsExact = vl_target.matchType === "exact";
+
+    if (vl_existingIsExact && !vl_candidateIsExact) {
+      // A family fallback cannot override a precise reviewed mapping.
+      continue;
+    }
+
+    if (!vl_existingIsExact && vl_candidateIsExact) {
+      vl_exact.set(vl_mapping.llbmId, vl_target);
+      continue;
+    }
+
+    // Same kind, distinct targets: ambiguous, drop the key entirely.
+    vl_exact.delete(vl_mapping.llbmId);
+    vl_exactAmbiguous.add(vl_mapping.llbmId);
+  }
+
+  const vl_folded = new Map<string, _MappedTarget>();
+  const vl_foldedAmbiguous = new Set<string>();
+
+  for (const [vl_key, vl_target] of vl_exact) {
+    const vl_foldKey = vl_key.toLowerCase();
+
+    if (vl_foldedAmbiguous.has(vl_foldKey)) {
+      continue;
+    }
+
+    const vl_existing = vl_folded.get(vl_foldKey);
+
+    if (vl_existing === undefined) {
+      vl_folded.set(vl_foldKey, vl_target);
+    } else if (vl_existing.opencodeId !== vl_target.opencodeId) {
+      // Distinct exact keys that collide when casefolded make the fold
+      // lookup ambiguous; exact matches remain usable.
+      vl_folded.delete(vl_foldKey);
+      vl_foldedAmbiguous.add(vl_foldKey);
+    }
+  }
+
+  return { exact: vl_exact, folded: vl_folded };
+}
+
+function fh_lookupMapping(
+  p_index: _MappingIndex,
+  p_sourceModelId: string,
+): _MappedTarget | undefined {
+  const vl_exact = p_index.exact.get(p_sourceModelId);
+
+  if (vl_exact !== undefined) {
+    return vl_exact;
+  }
+
+  return p_index.folded.get(p_sourceModelId.toLowerCase());
+}
+
+function fh_resolveAliases(
+  p_sourceModelId: string,
+  p_index: {
+    readonly byId: ReadonlyMap<string, readonly unknown[]>;
+    readonly byModelId: ReadonlyMap<string, readonly unknown[]>;
+    readonly byCanonicalId: ReadonlyMap<string, readonly unknown[]>;
+    readonly byNormalizedId: ReadonlyMap<string, readonly unknown[]>;
+  },
+  p_aliases: readonly {
+    readonly providerId: string;
+    readonly canonicalModelId: string;
+    readonly aliases: readonly string[];
+  }[],
+): { matched: boolean; models: readonly { id: string }[] } {
+  // No aliases in LLMBM system
+  return {
+    matched: false,
+    models: [],
+  };
+}
+
+function fh_resolveNormalized(
+  p_sourceModelId: string,
+  p_index: {
+    readonly byNormalizedId: ReadonlyMap<string, readonly ModelRecord[]>;
+  },
+): readonly { id: string }[] | null {
+  const vl_key = f_normalizeModelId(p_sourceModelId);
+
+  if (vl_key.length === 0) {
+    return null;
+  }
+
+  return p_index.byNormalizedId.get(vl_key) ?? null;
+}
+
+function fh_sortBenchmarks(
+  p_benchmarks: readonly ModelBenchmark[],
+): readonly ModelBenchmark[] {
+  return [...p_benchmarks].sort(
+    (p_left, p_right) =>
+      (k_benchmarkOrder.get(p_left.benchmarkId) ?? 0) -
+      (k_benchmarkOrder.get(p_right.benchmarkId) ?? 0),
+  );
+}
+
 export function f_matchBenchmarkRecords(
   p_models: readonly ModelRecord[],
   p_benchmarks: readonly ModelBenchmark[],
-  p_aliases: readonly ModelAlias[] = k_modelAliases,
-  p_mappings: readonly BenchmarkMapping[] = k_benchmarkMappings,
-): BenchmarkMatchResult {
+  p_aliases: readonly { readonly providerId: string; readonly canonicalModelId: string; readonly aliases: readonly string[] }[] = [],
+  p_mappings: readonly LlbmMapping[] = k_llbmMappings,
+): Promise<BenchmarkMatchResult> {
   const vl_index = fh_indexModels(p_models);
   const vl_mappingIndex = fh_indexMappings(p_mappings);
+
   const vl_benchmarksByModel = new Map<string, ModelBenchmark[]>();
   const vl_changedModels = new Set<string>();
   const vl_matches: BenchmarkMatch[] = [];
@@ -135,113 +269,195 @@ export function f_matchBenchmarkRecords(
       continue;
     }
 
-    const vl_resolution = fh_resolveModel(
-      vl_benchmark.benchmarkId,
-      vl_sourceModelId,
-      vl_index,
-      p_aliases,
-      vl_mappingIndex,
-    );
+    const vl_smid = vl_sourceModelId;
 
-    if (vl_resolution.aliasMatchedWithoutTarget) {
-      vl_unmatched.push({
-        benchmarkId: vl_benchmark.benchmarkId,
-        sourceModelId: vl_sourceModelId,
-        reason: "alias-target-missing",
+    // 1. exact provider/model key
+    const vl_exactId = vl_index.byId.get(vl_smid);
+    if (vl_exactId !== undefined && vl_exactId.length > 0) {
+      const vl_target = vl_exactId[0]!;
+      const vl_attached = { ...vl_benchmark, matchType: "exact" as BenchmarkMatchType };
+      fh_addBenchmarkToModel(vl_benchmarksByModel, vl_changedModels, vl_target.id, vl_attached);
+      vl_matches.push({
+        benchmark: vl_attached,
+        modelId: vl_target.id,
+        strategy: "exact-id",
+        matchType: "exact",
       });
       continue;
     }
 
-    if (vl_resolution.mappingMatchedWithoutTarget) {
-      vl_unmatched.push({
-        benchmarkId: vl_benchmark.benchmarkId,
-        sourceModelId: vl_sourceModelId,
-        reason: "mapping-target-missing",
+    // 2. exact model ID
+    const vl_exactModelId = vl_index.byModelId.get(vl_smid);
+    if (vl_exactModelId !== undefined && vl_exactModelId.length === 1) {
+      const vl_target = vl_exactModelId[0]!;
+      const vl_attached = { ...vl_benchmark, matchType: "exact" as BenchmarkMatchType };
+      fh_addBenchmarkToModel(vl_benchmarksByModel, vl_changedModels, vl_target.id, vl_attached);
+      vl_matches.push({
+        benchmark: vl_attached,
+        modelId: vl_target.id,
+        strategy: "exact-model-id",
+        matchType: "exact",
       });
       continue;
     }
-
-    if (vl_resolution.models.length === 0) {
+    if (vl_exactModelId !== undefined && vl_exactModelId.length > 1) {
       vl_unmatched.push({
         benchmarkId: vl_benchmark.benchmarkId,
-        sourceModelId: vl_sourceModelId,
-        reason: "no-match",
-      });
-      continue;
-    }
-
-    if (vl_resolution.models.length > 1) {
-      vl_unmatched.push({
-        benchmarkId: vl_benchmark.benchmarkId,
-        sourceModelId: vl_sourceModelId,
+        sourceModelId: vl_smid,
         reason: "ambiguous",
       });
       continue;
     }
 
-    const vl_target = vl_resolution.models[0];
-
-    if (vl_target === undefined) {
+    // 3. exact canonical ID
+    const vl_canonical = vl_index.byCanonicalId.get(vl_smid);
+    if (vl_canonical !== undefined && vl_canonical.length === 1) {
+      const vl_target = vl_canonical[0]!;
+      const vl_attached = { ...vl_benchmark, matchType: "exact" as BenchmarkMatchType };
+      fh_addBenchmarkToModel(vl_benchmarksByModel, vl_changedModels, vl_target.id, vl_attached);
+      vl_matches.push({
+        benchmark: vl_attached,
+        modelId: vl_target.id,
+        strategy: "canonical-id",
+        matchType: "exact",
+      });
+      continue;
+    }
+    if (vl_canonical !== undefined && vl_canonical.length > 1) {
       vl_unmatched.push({
         benchmarkId: vl_benchmark.benchmarkId,
-        sourceModelId: vl_sourceModelId,
-        reason: "no-match",
+        sourceModelId: vl_smid,
+        reason: "ambiguous",
       });
       continue;
     }
 
-    const vl_existing =
-      vl_benchmarksByModel.get(vl_target.id) ?? vl_target.benchmarks;
-
-    // One row per benchmark. A second row for the same model would make the
-    // displayed score depend on source order.
-    if (
-      vl_existing.some(
-        (p_entry) => p_entry.benchmarkId === vl_benchmark.benchmarkId,
-      )
-    ) {
-      vl_unmatched.push({
-        benchmarkId: vl_benchmark.benchmarkId,
-        sourceModelId: vl_sourceModelId,
-        reason: "duplicate-benchmark",
+    // 4. reviewed aliases
+    const vl_alias = fh_resolveAliases(vl_smid, vl_index, []);
+    if (vl_alias.matched) {
+      if (vl_alias.models.length === 0) {
+        vl_unmatched.push({
+          benchmarkId: vl_benchmark.benchmarkId,
+          sourceModelId: vl_smid,
+          reason: "alias-target-missing",
+        });
+        continue;
+      }
+      const vl_target = vl_alias.models[0]!;
+      const vl_attached = { ...vl_benchmark, matchType: "alias" as BenchmarkMatchType };
+      fh_addBenchmarkToModel(vl_benchmarksByModel, vl_changedModels, vl_target.id, vl_attached);
+      vl_matches.push({
+        benchmark: vl_attached,
+        modelId: vl_target.id,
+        strategy: "alias",
+        matchType: "alias",
       });
       continue;
     }
 
-    const vl_matchType = fh_matchTypeForResolution(vl_resolution);
-    const vl_attached: ModelBenchmark = { ...vl_benchmark, matchType: vl_matchType };
-    const vl_nextBenchmarks = [...vl_existing, vl_attached];
-    vl_benchmarksByModel.set(vl_target.id, vl_nextBenchmarks);
-    vl_changedModels.add(vl_target.id);
-    vl_matches.push({
-      benchmark: vl_attached,
-      modelId: vl_target.id,
-      strategy: vl_resolution.strategy,
-      matchType: vl_matchType,
+    // 5. reviewed LLMBM mappings
+    const vl_mapping = fh_lookupMapping(
+      vl_mappingIndex,
+      vl_smid,
+    );
+    if (vl_mapping !== undefined) {
+      const vl_targets: ModelRecord[] = [];
+      const vl_targetById = vl_index.byId.get(vl_mapping.opencodeId);
+      if (vl_targetById !== undefined && vl_targetById.length > 0) {
+        for (const vl_target of vl_targetById) {
+          if (!vl_targets.some((p) => p.id === vl_target.id)) {
+            vl_targets.push(vl_target);
+          }
+        }
+      }
+
+      if (vl_targets.length === 0) {
+        vl_unmatched.push({
+          benchmarkId: vl_benchmark.benchmarkId,
+          sourceModelId: vl_smid,
+          reason: "mapping-target-missing",
+        });
+        continue;
+      }
+
+      const vl_target = vl_targets[0]!;
+      const vl_attached = { ...vl_benchmark, matchType: vl_mapping.matchType as BenchmarkMatchType };
+      fh_addBenchmarkToModel(vl_benchmarksByModel, vl_changedModels, vl_target.id, vl_attached);
+      vl_matches.push({
+        benchmark: vl_attached,
+        modelId: vl_target.id,
+        strategy: "mapping",
+        matchType: vl_mapping.matchType,
+      });
+      continue;
+    }
+
+    // 6. conservative normalized model/canonical IDs
+    const vl_normalized = fh_resolveNormalized(vl_smid, vl_index);
+    if (vl_normalized !== null && vl_normalized.length === 1) {
+      const vl_target = vl_normalized[0]!;
+      const vl_attached = { ...vl_benchmark, matchType: "exact" as BenchmarkMatchType };
+      fh_addBenchmarkToModel(vl_benchmarksByModel, vl_changedModels, vl_target.id, vl_attached);
+      vl_matches.push({
+        benchmark: { ...vl_benchmark, matchType: "exact" },
+        modelId: vl_target.id,
+        strategy: "normalized",
+        matchType: "exact",
+      });
+      continue;
+    }
+    if (vl_normalized !== null && vl_normalized.length > 1) {
+      vl_unmatched.push({
+        benchmarkId: vl_benchmark.benchmarkId,
+        sourceModelId: vl_smid,
+        reason: "ambiguous",
+      });
+      continue;
+    }
+
+    // No match found
+    vl_unmatched.push({
+      benchmarkId: vl_benchmark.benchmarkId,
+      sourceModelId: vl_smid,
+      reason: "no-match",
     });
   }
 
   const vl_models = p_models.map((p_model) => {
-    if (!vl_changedModels.has(p_model.id)) {
+    const vl_newBenchmarks = vl_benchmarksByModel.get(p_model.id) ?? [];
+    if (vl_newBenchmarks.length === 0) {
       return p_model;
     }
-
-    const vl_benchmarks = vl_benchmarksByModel.get(p_model.id) ?? [];
-
     return {
       ...p_model,
-      benchmarks: fh_sortBenchmarks(vl_benchmarks),
+      benchmarks: fh_sortBenchmarks(vl_newBenchmarks),
     };
   });
 
-  return {
+  return Promise.resolve({
     models: vl_models,
     matches: vl_matches,
     unmatched: vl_unmatched,
-  };
+  });
 }
 
-function fh_indexModels(p_models: readonly ModelRecord[]): ModelIndex {
+function fh_addBenchmarkToModel(
+  p_benchmarksByModel: Map<string, ModelBenchmark[]>,
+  p_changedModels: Set<string>,
+  p_modelId: string,
+  p_benchmark: ModelBenchmark,
+): void {
+  const vl_existing = p_benchmarksByModel.get(p_modelId) ?? [];
+  p_benchmarksByModel.set(p_modelId, [...vl_existing, p_benchmark]);
+  p_changedModels.add(p_modelId);
+}
+
+function fh_indexModels(p_models: readonly ModelRecord[]): {
+  readonly byId: ReadonlyMap<string, readonly ModelRecord[]>;
+  readonly byModelId: ReadonlyMap<string, readonly ModelRecord[]>;
+  readonly byCanonicalId: ReadonlyMap<string, readonly ModelRecord[]>;
+  readonly byNormalizedId: ReadonlyMap<string, readonly ModelRecord[]>;
+} {
   const vl_byId = new Map<string, ModelRecord[]>();
   const vl_byModelId = new Map<string, ModelRecord[]>();
   const vl_byCanonicalId = new Map<string, ModelRecord[]>();
@@ -285,207 +501,4 @@ function fh_addToIndex(
   if (!vl_existing.some((p_entry) => p_entry.id === p_model.id)) {
     vl_existing.push(p_model);
   }
-}
-
-function fh_resolveModel(
-  p_benchmarkId: BenchmarkId,
-  p_sourceModelId: string,
-  p_index: ModelIndex,
-  p_aliases: readonly ModelAlias[],
-  p_mappingIndex: MappingIndex,
-): MatchResolution {
-  const vl_exactId = p_index.byId.get(p_sourceModelId);
-
-  if (vl_exactId !== undefined) {
-    return fh_resolution(vl_exactId, "exact-id");
-  }
-
-  const vl_exactModelId = p_index.byModelId.get(p_sourceModelId);
-
-  if (vl_exactModelId !== undefined) {
-    return fh_resolution(vl_exactModelId, "exact-model-id");
-  }
-
-  const vl_canonical = p_index.byCanonicalId.get(p_sourceModelId);
-
-  if (vl_canonical !== undefined) {
-    return fh_resolution(vl_canonical, "canonical-id");
-  }
-
-  const vl_alias = fh_resolveAliases(p_sourceModelId, p_index, p_aliases);
-
-  if (vl_alias.matched) {
-    return {
-      models: vl_alias.models,
-      strategy: "alias",
-      aliasMatchedWithoutTarget: vl_alias.models.length === 0,
-      mappingMatchedWithoutTarget: false,
-      matchType: null,
-    };
-  }
-
-  const vl_mapping = fh_lookupMapping(p_mappingIndex, p_benchmarkId, p_sourceModelId);
-
-  if (vl_mapping !== undefined) {
-    const vl_targets = p_index.byId.get(vl_mapping.opencodeModelId) ?? [];
-
-    return {
-      models: vl_targets,
-      strategy: "mapping",
-      aliasMatchedWithoutTarget: false,
-      mappingMatchedWithoutTarget: vl_targets.length === 0,
-      matchType: vl_mapping.matchType,
-    };
-  }
-
-  const vl_normalized = fh_resolveNormalized(p_sourceModelId, p_index);
-
-  if (vl_normalized !== null) {
-    return fh_resolution(vl_normalized, "normalized");
-  }
-
-  return fh_resolution([], "normalized");
-}
-
-function fh_resolution(
-  p_models: readonly ModelRecord[],
-  p_strategy: MatchStrategy,
-): MatchResolution {
-  return {
-    models: p_models,
-    strategy: p_strategy,
-    aliasMatchedWithoutTarget: false,
-    mappingMatchedWithoutTarget: false,
-    matchType: null,
-  };
-}
-
-/**
- * Mapping lookup index (Adjustment 18): exact `benchmark sourceId` keys win;
- * casefolded keys act as a fallback only when they resolve to a single distinct
- * source string. Conflicting entries are dropped rather than guessed.
- */
-interface MappingIndex {
-  readonly exact: ReadonlyMap<string, BenchmarkMapping>;
-  readonly folded: ReadonlyMap<string, BenchmarkMapping>;
-}
-
-function fh_indexMappings(p_mappings: readonly BenchmarkMapping[]): MappingIndex {
-  const vl_exact = new Map<string, BenchmarkMapping>();
-  const vl_folded = new Map<string, BenchmarkMapping>();
-  const vl_exactAmbiguous = new Set<string>();
-  const vl_foldedAmbiguous = new Set<string>();
-
-  for (const vl_mapping of p_mappings) {
-    const vl_exactKey = `${vl_mapping.benchmarkId} ${vl_mapping.sourceModelId}`;
-    const vl_foldedKey = `${vl_mapping.benchmarkId} ${vl_mapping.sourceModelId.toLowerCase()}`;
-
-    if (vl_exact.has(vl_exactKey)) {
-      // Two reviewed entries claim the same benchmark + source string. Drop the
-      // key from both views: ambiguous reviewed data is worse than none.
-      vl_exactAmbiguous.add(vl_exactKey);
-      vl_foldedAmbiguous.add(vl_foldedKey);
-      continue;
-    }
-
-    vl_exact.set(vl_exactKey, vl_mapping);
-
-    const vl_foldedExisting = vl_folded.get(vl_foldedKey);
-
-    if (
-      vl_foldedExisting !== undefined &&
-      vl_foldedExisting.sourceModelId !== vl_mapping.sourceModelId
-    ) {
-      // Distinct source strings that collide once casefolded make the fold
-      // lookup ambiguous; exact matches remain usable.
-      vl_foldedAmbiguous.add(vl_foldedKey);
-    } else if (vl_foldedExisting === undefined) {
-      vl_folded.set(vl_foldedKey, vl_mapping);
-    }
-  }
-
-  for (const vl_key of vl_exactAmbiguous) {
-    // Ambiguous reviewed data is worse than none: it would attach a score to
-    // the wrong model. Drop every entry for that key instead of guessing.
-    vl_exact.delete(vl_key);
-  }
-
-  for (const vl_key of vl_foldedAmbiguous) {
-    vl_folded.delete(vl_key);
-  }
-
-  return { exact: vl_exact, folded: vl_folded };
-}
-
-function fh_lookupMapping(
-  p_index: MappingIndex,
-  p_benchmarkId: BenchmarkId,
-  p_sourceModelId: string,
-): BenchmarkMapping | undefined {
-  const vl_exact = p_index.exact.get(`${p_benchmarkId} ${p_sourceModelId}`);
-
-  if (vl_exact !== undefined) {
-    return vl_exact;
-  }
-
-  return p_index.folded.get(`${p_benchmarkId} ${p_sourceModelId.toLowerCase()}`);
-}
-
-function fh_matchTypeForResolution(p_resolution: MatchResolution): BenchmarkMatchType {
-  if (p_resolution.matchType !== null) {
-    return p_resolution.matchType;
-  }
-
-  return p_resolution.strategy === "alias" ? "alias" : "exact";
-}
-
-function fh_resolveAliases(
-  p_sourceModelId: string,
-  p_index: ModelIndex,
-  p_aliases: readonly ModelAlias[],
-): AliasResolution {
-  const vl_matches = new Map<string, ModelRecord>();
-
-  for (const vl_alias of p_aliases) {
-    if (!vl_alias.aliases.includes(p_sourceModelId)) {
-      continue;
-    }
-
-    const vl_key = `${vl_alias.providerId}/${vl_alias.canonicalModelId}`;
-    const vl_targets = p_index.byId.get(vl_key) ?? [];
-
-    for (const vl_target of vl_targets) {
-      vl_matches.set(vl_target.id, vl_target);
-    }
-  }
-
-  return {
-    matched: p_aliases.some((p_alias) =>
-      p_alias.aliases.includes(p_sourceModelId),
-    ),
-    models: [...vl_matches.values()],
-  };
-}
-
-function fh_resolveNormalized(
-  p_sourceModelId: string,
-  p_index: ModelIndex,
-): readonly ModelRecord[] | null {
-  const vl_key = f_normalizeModelId(p_sourceModelId);
-
-  if (vl_key.length === 0) {
-    return null;
-  }
-
-  return p_index.byNormalizedId.get(vl_key) ?? null;
-}
-
-function fh_sortBenchmarks(
-  p_benchmarks: readonly ModelBenchmark[],
-): readonly ModelBenchmark[] {
-  return [...p_benchmarks].sort(
-    (p_left, p_right) =>
-      (k_benchmarkOrder.get(p_left.benchmarkId) ?? 0) -
-      (k_benchmarkOrder.get(p_right.benchmarkId) ?? 0),
-  );
 }

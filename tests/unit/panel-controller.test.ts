@@ -62,15 +62,14 @@ function f_createSnapshot(
       sources: [
         vl_source("opencode-models"),
         vl_source("opencode-pricing"),
-        vl_source("gpqa"),
-        vl_source("livecodebench"),
+        vl_source("llbm"),
         vl_source("models-dev"),
       ],
     },
     matches: [],
     unmatched: [],
     warnings: Array.from({ length: p_warningCount }, (_, p_index) => ({
-      source: "gpqa",
+      source: "llbm",
       code: "test",
       message: `warning ${p_index}`,
     })),
@@ -113,23 +112,22 @@ describe("format helpers", () => {
 
 describe("chip labels", () => {
   test("selected chips carry a double marker, hovered a single one", () => {
-    expect(f_formatChipLabel(true, false, "GPQA")).toBe("[>>GPQA]");
-    expect(f_formatChipLabel(false, true, "GPQA")).toBe("[>GPQA]");
-    expect(f_formatChipLabel(false, false, "GPQA")).toBe("[GPQA]");
-    expect(f_formatChipLabel(true, true, "GPQA")).toBe("[>>GPQA]");
-    expect(f_formatChipLabel(true, false, "missing GPQA")).toBe("[>>missing GPQA]");
-    expect(f_formatChipLabel(false, true, "missing LCB")).toBe("[>missing LCB]");
+    expect(f_formatChipLabel(true, false, "LLBM")).toBe("[>>LLBM]");
+    expect(f_formatChipLabel(false, true, "LLBM")).toBe("[>LLBM]");
+    expect(f_formatChipLabel(false, false, "LLBM")).toBe("[LLBM]");
+    expect(f_formatChipLabel(true, true, "LLBM")).toBe("[>>LLBM]");
+    expect(f_formatChipLabel(true, false, "missing")).toBe("[>>missing]");
+    expect(f_formatChipLabel(false, true, "free")).toBe("[>free]");
     expect(f_formatChipLabel(false, false, "free")).toBe("[free]");
   });
 });
 
 describe("sort and ranking state", () => {
   test("default direction is descending for score/date columns, ascending otherwise", () => {
-    expect(f_getDefaultSortDirection("gpqaScore")).toBe("desc");
-    expect(f_getDefaultSortDirection("livecodebenchScore")).toBe("desc");
+    expect(f_getDefaultSortDirection("llbmScore")).toBe("desc");
     expect(f_getDefaultSortDirection("releaseDate")).toBe("desc");
     expect(f_getDefaultSortDirection("contextWindow")).toBe("desc");
-    expect(f_getDefaultSortDirection("gpqaRank")).toBe("asc");
+    expect(f_getDefaultSortDirection("llbmRank")).toBe("asc");
     expect(f_getDefaultSortDirection("inputPrice")).toBe("asc");
     expect(f_getDefaultSortDirection("name")).toBe("asc");
   });
@@ -145,8 +143,8 @@ describe("sort and ranking state", () => {
   });
 
   test("selecting a new column uses its default direction", () => {
-    expect(f_nextSortState(fh_preferences({ sortKey: "name" }), "gpqaScore")).toEqual({
-      sortKey: "gpqaScore",
+    expect(f_nextSortState(fh_preferences({ sortKey: "name" }), "llbmScore")).toEqual({
+      sortKey: "llbmScore",
       sortDirection: "desc",
     });
     expect(f_nextSortState(fh_preferences({ sortKey: "name" }), "inputPrice")).toEqual({
@@ -171,8 +169,7 @@ describe("command parsing", () => {
   });
 
   test("sort accepts friendly aliases and column keys", () => {
-    expect(f_parseOverviewCommand("sort gpqa")).toEqual({ kind: "sort", key: "gpqaRank" });
-    expect(f_parseOverviewCommand("sort lcb")).toEqual({ kind: "sort", key: "livecodebenchRank" });
+    expect(f_parseOverviewCommand("sort llbm")).toEqual({ kind: "sort", key: "llbmRank" });
     expect(f_parseOverviewCommand("sort input-price")).toEqual({ kind: "sort", key: "inputPrice" });
     expect(f_parseOverviewCommand("sort inputPrice")).toEqual({ kind: "sort", key: "inputPrice" });
     expect(f_parseOverviewCommand("sort output-price")).toEqual({ kind: "sort", key: "outputPrice" });
@@ -183,7 +180,7 @@ describe("command parsing", () => {
   test("invalid commands are rejected", () => {
     expect(f_parseOverviewCommand("sort")).toBeUndefined();
     expect(f_parseOverviewCommand("sort nonsense")).toBeUndefined();
-    expect(f_parseOverviewCommand("ranking lcb")).toBeUndefined();
+    expect(f_parseOverviewCommand("ranking llbm")).toBeUndefined();
     expect(f_parseOverviewCommand("nope")).toBeUndefined();
   });
 
@@ -194,8 +191,8 @@ describe("command parsing", () => {
   test("sort key labels are human readable", () => {
     expect(f_getSortKeyLabel("name")).toBe("Model");
     expect(f_getSortKeyLabel("providerName")).toBe("Provider");
-    expect(f_getSortKeyLabel("gpqaScore")).toBe("GPQA");
-    expect(f_getSortKeyLabel("livecodebenchRank")).toBe("LCB");
+    expect(f_getSortKeyLabel("llbmScore")).toBe("LLBM");
+    expect(f_getSortKeyLabel("llbmRank")).toBe("LLBM");
     expect(f_getSortKeyLabel("contextWindow")).toBe("Ctx");
     expect(f_getSortKeyLabel("inputPrice")).toBe("In $/M");
   });
@@ -212,7 +209,7 @@ describe("derived rows", () => {
       inputPrice: 3,
       outputPrice: 15,
       contextWindow: 200_000,
-      benchmarks: [f_createTestBenchmark("gpqa", 80.1, { rank: 2 })],
+      benchmarks: [f_createTestBenchmark("llbm", 80.1, { rank: 2 })],
     }),
     f_createTestModel({
       id: "openai/gpt-test",
@@ -233,7 +230,7 @@ describe("derived rows", () => {
       inputPrice: null,
       outputPrice: null,
       contextWindow: null,
-      benchmarks: [f_createTestBenchmark("livecodebench", 50.5, { rank: 1 })],
+      benchmarks: [f_createTestBenchmark("llbm", 50.5, { rank: 1 })],
     }),
   ];
 
@@ -241,10 +238,10 @@ describe("derived rows", () => {
     const vl_rows = f_deriveOverviewRows(vl_models, fh_preferences(), k_defaultFilters);
     expect(vl_rows.totalCount).toBe(3);
     expect(vl_rows.filteredCount).toBe(3);
-    // Default is gpqaRank asc with missing ranks last (ties break by model ID).
+    // Default is llbmRank asc with missing ranks last (ties break by model ID).
     expect(vl_rows.rows.map((p_model) => p_model.id)).toEqual([
-      "anthropic/claude-test",
       "google/gemini-test",
+      "anthropic/claude-test",
       "openai/gpt-test",
     ]);
   });
@@ -256,27 +253,6 @@ describe("derived rows", () => {
       { ...k_defaultFilters, freeOnly: true },
     );
     expect(vl_rows.rows.map((p_model) => p_model.id)).toEqual(["openai/gpt-test"]);
-  });
-
-  test("missing-benchmark filters select models without a score", () => {
-    const vl_gpqa = f_deriveOverviewRows(
-      vl_models,
-      fh_preferences(),
-      { ...k_defaultFilters, missingGpqa: true },
-    );
-    expect(vl_gpqa.rows.map((p_model) => p_model.id)).toEqual([
-      "google/gemini-test",
-      "openai/gpt-test",
-    ]);
-    const vl_lcb = f_deriveOverviewRows(
-      vl_models,
-      fh_preferences(),
-      { ...k_defaultFilters, missingLiveCodeBench: true },
-    );
-    expect(vl_lcb.rows.map((p_model) => p_model.id)).toEqual([
-      "anthropic/claude-test",
-      "openai/gpt-test",
-    ]);
   });
 
   test("price sorting is numeric with missing values last", () => {
@@ -348,13 +324,13 @@ describe("status text", () => {
     const vl_leader = f_createTestModel({
       id: "anthropic/claude-test",
       name: "Claude Test",
-      benchmarks: [f_createTestBenchmark("gpqa", 80.1, { rank: 1 })],
+      benchmarks: [f_createTestBenchmark("llbm", 80.1, { rank: 1 })],
     });
-    expect(f_buildSidebarSummary(vl_leader, 16, "gpqa")).toBe(
-      "16 models · GPQA #1 Claude Test 80.1",
+    expect(f_buildSidebarSummary(vl_leader, 16)).toBe(
+      "16 models · LLBM #1 Claude Test 80.1",
     );
-    expect(f_buildSidebarSummary(null, 16, "livecodebench")).toBe(
-      "16 models · no LCB data",
+    expect(f_buildSidebarSummary(null, 16)).toBe(
+      "16 models · no LLBM data",
     );
   });
 });
@@ -423,13 +399,13 @@ describe("table lines", () => {
   });
 
   test("marks proxy benchmark cells with a tilde", () => {
-    const vl_columns: readonly TableColumn[] = [{ key: "gpqaRank", width: 11 }];
+    const vl_columns: readonly TableColumn[] = [{ key: "llbmRank", width: 11 }];
     const vl_rows = [
       f_createTestModel({
         id: "p/proxy",
         name: "Proxy",
         benchmarks: [
-          f_createTestBenchmark("gpqa", 50, { rank: 7, matchType: "version_proxy" }),
+          f_createTestBenchmark("llbm", 50, { rank: 7, matchType: "family_fallback" }),
         ],
       }),
     ];

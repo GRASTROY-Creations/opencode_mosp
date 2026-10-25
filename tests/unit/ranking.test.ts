@@ -87,20 +87,20 @@ describe("f_sortModels", () => {
     const vl_highScore = f_createTestModel({
       modelId: "high-score",
       benchmarks: [
-        f_createTestBenchmark("gpqa", 90, { sourceModelId: "high-score", rank: 2 }),
+        f_createTestBenchmark("llbm", 90, { sourceModelId: "high-score", rank: 2 }),
       ],
     });
     const vl_topRank = f_createTestModel({
       modelId: "top-rank",
       benchmarks: [
-        f_createTestBenchmark("gpqa", 80, { sourceModelId: "top-rank", rank: 1 }),
+        f_createTestBenchmark("llbm", 80, { sourceModelId: "top-rank", rank: 1 }),
       ],
     });
 
     expect(
       f_sortModels(
         [vl_topRank, vl_highScore],
-        "gpqaRank",
+        "llbmRank",
         "asc",
       ).map((p_model) => p_model.modelId),
     ).toEqual(["top-rank", "high-score"]);
@@ -108,7 +108,7 @@ describe("f_sortModels", () => {
     expect(
       f_sortModels(
         [vl_topRank, vl_highScore],
-        "gpqaScore",
+        "llbmScore",
         "desc",
       ).map((p_model) => p_model.modelId),
     ).toEqual(["high-score", "top-rank"]);
@@ -118,7 +118,7 @@ describe("f_sortModels", () => {
     const vl_ranked = f_createTestModel({
       modelId: "ranked",
       benchmarks: [
-        f_createTestBenchmark("gpqa", 75, {
+        f_createTestBenchmark("llbm", 75, {
           sourceModelId: "ranked",
           rank: 3,
         }),
@@ -130,7 +130,7 @@ describe("f_sortModels", () => {
       expect(
         f_sortModels(
           [vl_missing, vl_ranked],
-          "gpqaRank",
+          "llbmRank",
           vl_direction,
         ).map((p_model) => p_model.modelId),
       ).toEqual(["ranked", "missing"]);
@@ -177,15 +177,15 @@ describe("f_assignBenchmarkRanks", () => {
     const vl_models = [
       f_createTestModel({
         modelId: "a",
-        benchmarks: [f_createTestBenchmark("gpqa", 90, { sourceModelId: "a" })],
+        benchmarks: [f_createTestBenchmark("llbm", 90, { sourceModelId: "a" })],
       }),
       f_createTestModel({
         modelId: "b",
-        benchmarks: [f_createTestBenchmark("gpqa", 90, { sourceModelId: "b" })],
+        benchmarks: [f_createTestBenchmark("llbm", 90, { sourceModelId: "b" })],
       }),
       f_createTestModel({
         modelId: "c",
-        benchmarks: [f_createTestBenchmark("gpqa", 80, { sourceModelId: "c" })],
+        benchmarks: [f_createTestBenchmark("llbm", 80, { sourceModelId: "c" })],
       }),
     ];
 
@@ -204,7 +204,7 @@ describe("f_assignBenchmarkRanks", () => {
       f_createTestModel({
         modelId: "no-score",
         benchmarks: [
-          f_createTestBenchmark("gpqa", null, { sourceModelId: "no-score" }),
+          f_createTestBenchmark("llbm", null, { sourceModelId: "no-score" }),
         ],
       }),
       f_createTestModel({ modelId: "no-row" }),
@@ -220,7 +220,7 @@ describe("f_assignBenchmarkRanks", () => {
     const vl_model = f_createTestModel({
       modelId: "stale",
       benchmarks: [
-        f_createTestBenchmark("gpqa", null, {
+        f_createTestBenchmark("llbm", null, {
           sourceModelId: "stale",
           rank: 4,
         }),
@@ -237,15 +237,13 @@ describe("f_assignBenchmarkRanks", () => {
       f_createTestModel({
         modelId: "a",
         benchmarks: [
-          f_createTestBenchmark("gpqa", 90, { sourceModelId: "a" }),
-          f_createTestBenchmark("livecodebench", 20, { sourceModelId: "a" }),
+          f_createTestBenchmark("llbm", 90, { sourceModelId: "a" }),
         ],
       }),
       f_createTestModel({
         modelId: "b",
         benchmarks: [
-          f_createTestBenchmark("gpqa", 80, { sourceModelId: "b" }),
-          f_createTestBenchmark("livecodebench", 60, { sourceModelId: "b" }),
+          f_createTestBenchmark("llbm", 80, { sourceModelId: "b" }),
         ],
       }),
     ];
@@ -258,8 +256,7 @@ describe("f_assignBenchmarkRanks", () => {
         p_entry.rank,
       ]),
     ).toEqual([
-      ["gpqa", 1],
-      ["livecodebench", 2],
+      ["llbm", 1],
     ]);
     expect(
       vl_ranked[1]?.benchmarks.map((p_entry) => [
@@ -267,8 +264,7 @@ describe("f_assignBenchmarkRanks", () => {
         p_entry.rank,
       ]),
     ).toEqual([
-      ["gpqa", 2],
-      ["livecodebench", 1],
+      ["llbm", 2],
     ]);
   });
 
@@ -276,7 +272,7 @@ describe("f_assignBenchmarkRanks", () => {
     const vl_model = f_createTestModel({
       modelId: "stable",
       benchmarks: [
-        f_createTestBenchmark("gpqa", 88, {
+        f_createTestBenchmark("llbm", 88, {
           sourceModelId: "stable",
           rank: 1,
         }),

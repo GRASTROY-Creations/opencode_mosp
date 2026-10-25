@@ -26,9 +26,12 @@ bun test
 `bun run check` runs all three gates sequentially.
 
 `bun run validate:mappings` (scripts/validate-mappings.ts) re-checks the
-reviewed benchmark mappings against the live GPQA/LiveCodeBench sources and the
-location catalog (`--skip-catalog` to omit the latter). It needs network access
-and is intentionally NOT part of `bun run check` or CI.
+reviewed LLMBM mappings (`src/config/llbm-mappings.ts`) against the live
+LLMBM `/v1/export` scored set and the location catalog (`--skip-catalog` to
+omit the latter). `bun run generate:mappings` (scripts/generate-mappings.ts)
+regenerates the mapping table from the live scored set and prints a review
+table before the emitted TypeScript is adopted. Both need network access and
+are intentionally NOT part of `bun run check` or CI.
 
 ## Version policy result (spec §5.2)
 

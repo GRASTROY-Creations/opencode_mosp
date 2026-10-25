@@ -30,10 +30,10 @@ describe("f_createMemoryCache", () => {
 
     expect(vl_first.key).not.toBe(vl_second.key);
 
-    const vl_write = await vl_first.write("gpqa", k_payload, k_now, k_ttlMs);
+    const vl_write = await vl_first.write("llbm", k_payload, k_now, k_ttlMs);
     expect(vl_write).toEqual({ ok: true });
 
-    const vl_read = await vl_first.read("gpqa", k_now);
+    const vl_read = await vl_first.read("llbm", k_now);
     expect(vl_read.ok).toBe(true);
 
     if (!vl_read.ok) {
@@ -43,7 +43,7 @@ describe("f_createMemoryCache", () => {
     expect(vl_read.value.fresh).toBe(true);
     expect(vl_read.value.envelope).toMatchObject({
       schemaVersion: k_cacheSchemaVersion,
-      source: "gpqa",
+      source: "llbm",
       fetchedAt: k_now.toISOString(),
       ttlMs: k_ttlMs,
     });
@@ -53,15 +53,15 @@ describe("f_createMemoryCache", () => {
   test("reports missing entries and enforces the freshness boundary", async () => {
     const vl_cache = f_createMemoryCache();
 
-    expect(await vl_cache.read("gpqa", k_now)).toEqual({
+    expect(await vl_cache.read("llbm", k_now)).toEqual({
       ok: false,
       reason: "missing",
     });
 
-    await vl_cache.write("gpqa", k_payload, k_now, k_ttlMs);
+    await vl_cache.write("llbm", k_payload, k_now, k_ttlMs);
 
     const vl_atBoundary = await vl_cache.read(
-      "gpqa",
+      "llbm",
       new Date(k_now.getTime() + k_ttlMs),
     );
     expect(vl_atBoundary.ok).toBe(true);
@@ -71,7 +71,7 @@ describe("f_createMemoryCache", () => {
     }
 
     const vl_afterBoundary = await vl_cache.read(
-      "gpqa",
+      "llbm",
       new Date(k_now.getTime() + k_ttlMs + 1),
     );
     expect(vl_afterBoundary.ok).toBe(true);
@@ -90,11 +90,11 @@ describe("f_createMemoryCache", () => {
     ).toEqual({ ok: false, error: "cache source is invalid" });
 
     expect(
-      await vl_cache.write("gpqa", k_payload, k_now, -1),
+      await vl_cache.write("llbm", k_payload, k_now, -1),
     ).toEqual({ ok: false, error: "cache TTL is invalid" });
 
     expect(
-      await vl_cache.write("gpqa", k_payload, k_now, Number.NaN),
+      await vl_cache.write("llbm", k_payload, k_now, Number.NaN),
     ).toEqual({ ok: false, error: "cache TTL is invalid" });
   });
 });
@@ -107,20 +107,20 @@ describe("f_createFileCache", () => {
       const vl_cache = f_createFileCache(vl_directory);
 
       expect(vl_cache.key).toBe(`file:${resolve(vl_directory)}`);
-      expect(await vl_cache.read("gpqa", k_now)).toEqual({
+      expect(await vl_cache.read("llbm", k_now)).toEqual({
         ok: false,
         reason: "missing",
       });
 
       const vl_write = await vl_cache.write(
-        "gpqa",
+        "llbm",
         k_payload,
         k_now,
         k_ttlMs,
       );
       expect(vl_write).toEqual({ ok: true });
 
-      const vl_read = await vl_cache.read("gpqa", k_now);
+      const vl_read = await vl_cache.read("llbm", k_now);
       expect(vl_read.ok).toBe(true);
 
       if (!vl_read.ok) {
@@ -131,7 +131,7 @@ describe("f_createFileCache", () => {
       expect(vl_read.value.fresh).toBe(true);
 
       const vl_entries = await readdir(vl_directory);
-      expect(vl_entries).toContain("gpqa.json");
+      expect(vl_entries).toContain("llbm.json");
       expect(vl_entries.some((p_entry) => p_entry.endsWith(".tmp"))).toBe(
         false,
       );
@@ -146,16 +146,16 @@ describe("f_createFileCache", () => {
     try {
       const vl_cache = f_createFileCache(vl_directory);
 
-      await vl_cache.write("gpqa", [{ version: 1 }], k_now, k_ttlMs);
+      await vl_cache.write("llbm", [{ version: 1 }], k_now, k_ttlMs);
       await vl_cache.write(
-        "gpqa",
+        "llbm",
         [{ version: 2 }],
         new Date(k_now.getTime() + 1_000),
         k_ttlMs,
       );
 
       const vl_read = await vl_cache.read(
-        "gpqa",
+        "llbm",
         new Date(k_now.getTime() + 2_000),
       );
 
@@ -166,7 +166,7 @@ describe("f_createFileCache", () => {
       expect(vl_read.value.envelope.payload).toEqual([{ version: 2 }]);
 
       const vl_entries = await readdir(vl_directory);
-      expect(vl_entries).toEqual(["gpqa.json"]);
+      expect(vl_entries).toEqual(["llbm.json"]);
     } finally {
       await rm(vl_directory, { recursive: true, force: true });
     }
@@ -177,10 +177,10 @@ describe("f_createFileCache", () => {
 
     try {
       const vl_cache = f_createFileCache(vl_directory);
-      const vl_path = join(vl_directory, "gpqa.json");
+      const vl_path = join(vl_directory, "llbm.json");
 
       await writeFile(vl_path, "{ not json", "utf8");
-      expect(await vl_cache.read("gpqa", k_now)).toEqual({
+      expect(await vl_cache.read("llbm", k_now)).toEqual({
         ok: false,
         reason: "invalid",
       });
@@ -189,14 +189,14 @@ describe("f_createFileCache", () => {
         vl_path,
         JSON.stringify({
           schemaVersion: k_cacheSchemaVersion + 1,
-          source: "gpqa",
+          source: "llbm",
           fetchedAt: k_now.toISOString(),
           ttlMs: k_ttlMs,
           payload: k_payload,
         }),
         "utf8",
       );
-      expect(await vl_cache.read("gpqa", k_now)).toEqual({
+      expect(await vl_cache.read("llbm", k_now)).toEqual({
         ok: false,
         reason: "invalid",
       });
@@ -205,14 +205,14 @@ describe("f_createFileCache", () => {
         vl_path,
         JSON.stringify({
           schemaVersion: k_cacheSchemaVersion,
-          source: "livecodebench",
+          source: "models-dev",
           fetchedAt: k_now.toISOString(),
           ttlMs: k_ttlMs,
           payload: k_payload,
         }),
         "utf8",
       );
-      expect(await vl_cache.read("gpqa", k_now)).toEqual({
+      expect(await vl_cache.read("llbm", k_now)).toEqual({
         ok: false,
         reason: "invalid",
       });

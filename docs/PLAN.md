@@ -458,6 +458,64 @@ Owner answers to the plan questions (verbatim): scope = "Seeds + validator scrip
   `f_buildHuggingFaceLeaderboardUrl(k_gpqaDatasetId)`; the adapter itself was
   always correct. Final smoke: **PASS 3/3, catalog:ok**.
 
+### Adjustment 19 — LLMBM migration (owner directive, 2026-10-25)
+
+Owner knowledge docs (KNOWLEDGE_07/08) + `docs/llmbm-migration-plan.md`
+directed replacing the GPQA + LiveCodeBench pair with a single LLMBM
+(LLMBenchmark.ai) benchmark, clean break:
+
+- Schema: `BenchmarkId = "llbm"` only; sort keys `llbmScore`/`llbmRank`
+  (default `llbmRank` asc); `SourceId` gains `llbm`, loses `gpqa`/
+  `livecodebench`; `matchType` reduced to `exact | alias | family_fallback`.
+- Providers: deleted `src/providers/huggingface-gpqa.ts` and
+  `src/providers/livecodebench.ts`; new `src/providers/llbm.ts`;
+  `model-overview.ts` reduced to a single benchmark loader (`loadLlbm`).
+- Mappings: `src/config/llbm-mappings.ts` with per-catalog entries
+  `{ opencodeId, llbmId, matchType }`; old `benchmark-mappings.ts` removed.
+- UI: single `LLBM` column (proxy rows prefixed `~`); status/summary wording
+  switched to LLBM.
+- Migration fallout was repaired across matching, ranking, cache tests and all
+  unit suites; gate re-verified at each step.
+
+### Adjustment 20 — LLMBM real-data fix (owner report, 2026-10-25)
+
+Owner report (verbatim): "seems like no model is mapped properly to the llbm
+models as none of current listed models have a value in LLMBM column; to be
+fixed: propose solution". Diagnosis: the `/v1/scores?metric=coding` endpoint
+the adapter was built against is **dead** (422 without metric, empty list
+with any tried metric); the KNOWLEDGE_08-derived mapping table attached only
+24 targets, most of which did not exist in the live dataset. Owner chose
+"Option A" with metric `aa_coding_index` and "Auto-adopt exact + review
+table".
+
+- Adapter rewritten against `GET /v1/export` (~8.3 MB): metric filtering,
+  unit normalization (`points` as-is with 0–100 guard, `ratio` × 100, other
+  units skipped with warnings), duplicate rows keep the highest score,
+  deterministic row order, no ad-hoc private cache (the model-overview cache
+  envelope owns the 6 h TTL), 30 s timeout floor,
+  `OPENCODE_LLM_BENCH_METRIC` override.
+- `scripts/generate-mappings.ts` (`bun run generate:mappings`) regenerates the
+  mapping table from the live scored set: tail-after-provider exact match →
+  casefold → `-free` sibling as `family_fallback`; **37 of 82** catalog models
+  matched and were adopted; the review table + suggestion list is printed for
+  the owner. Dot-vs-dash and suffix near-misses (e.g. `claude-opus-4-8` vs
+  `claude-opus-4.8`) were NOT auto-adopted pending owner policy.
+- Matcher conflict rule: when two mappings share one LLBM id, the `exact`
+  entry wins over `family_fallback`; same-kind collisions stay ambiguous and
+  drop (keeps `z-ai/glm-5.3-flash` attached to the paid `glm-5.3-flash`).
+- `scripts/validate-mappings.ts` re-pointed at the export scored set; live
+  smoke passes for every adopted mapping.
+- Tests: new `tests/unit/llbm-adapter.test.ts` (+11 tests) against a trimmed
+  live fixture `tests/fixtures/llbm-export.sample.json`; test-models now
+  honors the `source` option; the weakened snapshot/mapping/merge expectations
+  from the migration were restored (ready snapshot matches 2 + ranks, host
+  catalog test attaches via the real `moonshotai/kimi-k2.6` mapping, merged
+  source only for duplicated IDs).
+- Docs: new `docs/api/llmbenchmark.md`; GPQA/LiveCodeBench docs and fixtures
+  deleted; `data-flow.md`, `caching.md`, `models-dev.md`,
+  `ui-integration.md`, `development.md`, fixtures README refreshed.
+- Re-verified: `bun run check` green — **163 tests / 555 assertions**, 0 fail.
+
 ### Phase 7 — Testing, security, CI
 Unit suite (normalization, aliases, price units incl. no double-scaling, score→rank, sort directions/ties/missing,
 filters, TTL, malformed/timeout/HTTP errors) + integration scenarios with mocked HTTP & committed fixtures (§14.2 list)

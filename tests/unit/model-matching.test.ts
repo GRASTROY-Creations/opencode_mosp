@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import type { BenchmarkMapping } from "../../src/config/benchmark-mappings";
-import type { ModelAlias } from "../../src/config/model-aliases";
+import type { LlbmMapping } from "../../src/config/llbm-mappings";
 import {
   f_matchBenchmarkRecords,
   f_normalizeModelId,
@@ -19,16 +18,16 @@ describe("f_normalizeModelId", () => {
 });
 
 describe("f_matchBenchmarkRecords", () => {
-  test("prefers the exact provider/model key", () => {
+  test("prefers the exact provider/model key", async () => {
     const vl_model = f_createTestModel({
       providerId: "test",
       modelId: "model-a",
     });
-    const vl_benchmark = f_createTestBenchmark("gpqa", 70, {
+    const vl_benchmark = f_createTestBenchmark("llbm", 70, {
       sourceModelId: "test/model-a",
     });
 
-    const vl_result = f_matchBenchmarkRecords([vl_model], [vl_benchmark]);
+    const vl_result = await f_matchBenchmarkRecords([vl_model], [vl_benchmark]);
 
     expect(vl_result.matches).toHaveLength(1);
     expect(vl_result.matches[0]?.strategy).toBe("exact-id");
@@ -36,196 +35,86 @@ describe("f_matchBenchmarkRecords", () => {
     expect(vl_result.models[0]?.benchmarks).toHaveLength(1);
   });
 
-  test("falls back to an exact model ID", () => {
+  test("falls back to an exact model ID", async () => {
     const vl_model = f_createTestModel({ modelId: "model-b" });
-    const vl_benchmark = f_createTestBenchmark("gpqa", 70, {
+    const vl_benchmark = f_createTestBenchmark("llbm", 70, {
       sourceModelId: "model-b",
     });
 
-    const vl_result = f_matchBenchmarkRecords([vl_model], [vl_benchmark]);
+    const vl_result = await f_matchBenchmarkRecords([vl_model], [vl_benchmark]);
 
     expect(vl_result.matches[0]?.strategy).toBe("exact-model-id");
     expect(vl_result.unmatched).toHaveLength(0);
   });
 
-  test("falls back to an exact canonical ID", () => {
+  test("falls back to an exact canonical ID", async () => {
     const vl_model = f_createTestModel({ canonicalId: "canonical-b" });
-    const vl_benchmark = f_createTestBenchmark("livecodebench", 42, {
+    const vl_benchmark = f_createTestBenchmark("llbm", 42, {
       sourceModelId: "canonical-b",
     });
 
-    const vl_result = f_matchBenchmarkRecords([vl_model], [vl_benchmark]);
+    const vl_result = await f_matchBenchmarkRecords([vl_model], [vl_benchmark]);
 
     expect(vl_result.matches[0]?.strategy).toBe("canonical-id");
   });
 
-  test("resolves a reviewed alias to exactly one model", () => {
-    const vl_model = f_createTestModel({
-      providerId: "test",
-      modelId: "model-c",
-    });
-    const vl_alias: ModelAlias = {
-      providerId: "test",
-      canonicalModelId: "model-c",
-      aliases: ["external-c"],
-      reason: "test mapping",
-    };
-
-    const vl_result = f_matchBenchmarkRecords(
-      [vl_model],
-      [f_createTestBenchmark("gpqa", 60, { sourceModelId: "external-c" })],
-      [vl_alias],
-    );
-
-    expect(vl_result.matches[0]?.strategy).toBe("alias");
-    expect(vl_result.matches[0]?.matchType).toBe("alias");
-    expect(vl_result.matches[0]?.modelId).toBe("test/model-c");
-  });
-
-  test("uses conservative normalized matching when unique", () => {
+  test("uses conservative normalized matching when unique", async () => {
     const vl_model = f_createTestModel({ modelId: "model-d" });
-    const vl_benchmark = f_createTestBenchmark("gpqa", 55, {
+    const vl_benchmark = f_createTestBenchmark("llbm", 55, {
       sourceModelId: "MODEL_D",
     });
 
-    const vl_result = f_matchBenchmarkRecords([vl_model], [vl_benchmark]);
+    const vl_result = await f_matchBenchmarkRecords([vl_model], [vl_benchmark]);
 
     expect(vl_result.matches[0]?.strategy).toBe("normalized");
   });
 
-  test("rejects an ambiguous normalized match", () => {
+  test("rejects an ambiguous normalized match", async () => {
     const vl_models = [
       f_createTestModel({ modelId: "model_x" }),
       f_createTestModel({ modelId: "model-x", providerId: "other" }),
     ];
-    const vl_benchmark = f_createTestBenchmark("gpqa", 55, {
+    const vl_benchmark = f_createTestBenchmark("llbm", 55, {
       sourceModelId: "MODEL_X",
     });
 
-    const vl_result = f_matchBenchmarkRecords(vl_models, [vl_benchmark]);
+    const vl_result = await f_matchBenchmarkRecords(vl_models, [vl_benchmark]);
 
     expect(vl_result.matches).toHaveLength(0);
     expect(vl_result.unmatched[0]?.reason).toBe("ambiguous");
   });
 
-  test("rejects an exact model ID shared by two providers", () => {
+  test("rejects an exact model ID shared by two providers", async () => {
     const vl_models = [
       f_createTestModel({ providerId: "test", modelId: "shared" }),
       f_createTestModel({ providerId: "other", modelId: "shared" }),
     ];
-    const vl_benchmark = f_createTestBenchmark("gpqa", 55, {
+    const vl_benchmark = f_createTestBenchmark("llbm", 55, {
       sourceModelId: "shared",
     });
 
-    const vl_result = f_matchBenchmarkRecords(vl_models, [vl_benchmark]);
+    const vl_result = await f_matchBenchmarkRecords(vl_models, [vl_benchmark]);
 
     expect(vl_result.matches).toHaveLength(0);
     expect(vl_result.unmatched[0]?.reason).toBe("ambiguous");
   });
 
-  test("does not strip a provider prefix during normalization", () => {
+  test("does not strip a provider prefix during normalization", async () => {
     const vl_model = f_createTestModel({ modelId: "model-a" });
-    const vl_benchmark = f_createTestBenchmark("gpqa", 55, {
+    const vl_benchmark = f_createTestBenchmark("llbm", 55, {
       sourceModelId: "test/model_a",
     });
 
-    const vl_result = f_matchBenchmarkRecords([vl_model], [vl_benchmark]);
+    const vl_result = await f_matchBenchmarkRecords([vl_model], [vl_benchmark]);
 
     expect(vl_result.unmatched[0]?.reason).toBe("no-match");
   });
 
-  test("records an alias whose target is absent", () => {
-    const vl_alias: ModelAlias = {
-      providerId: "test",
-      canonicalModelId: "missing-model",
-      aliases: ["external-z"],
-      reason: "test mapping",
-    };
-
-    const vl_result = f_matchBenchmarkRecords(
-      [f_createTestModel()],
-      [f_createTestBenchmark("gpqa", 50, { sourceModelId: "external-z" })],
-      [vl_alias],
-    );
-
-    expect(vl_result.unmatched[0]?.reason).toBe("alias-target-missing");
-  });
-
-  test("rejects two aliases that resolve to different models", () => {
-    const vl_aliases: readonly ModelAlias[] = [
-      {
-        providerId: "test",
-        canonicalModelId: "model-a",
-        aliases: ["shared-alias"],
-        reason: "test mapping",
-      },
-      {
-        providerId: "test",
-        canonicalModelId: "model-b",
-        aliases: ["shared-alias"],
-        reason: "test mapping",
-      },
-    ];
-
-    const vl_result = f_matchBenchmarkRecords(
-      [
-        f_createTestModel({ modelId: "model-a" }),
-        f_createTestModel({ modelId: "model-b" }),
-      ],
-      [
-        f_createTestBenchmark("gpqa", 50, {
-          sourceModelId: "shared-alias",
-        }),
-      ],
-      vl_aliases,
-    );
-
-    expect(vl_result.unmatched[0]?.reason).toBe("ambiguous");
-  });
-
-  test("does not overwrite an existing benchmark row", () => {
-    const vl_existing = f_createTestBenchmark("gpqa", 40, {
-      sourceModelId: "test/model-a",
-    });
-    const vl_model = f_createTestModel({ benchmarks: [vl_existing] });
-    const vl_result = f_matchBenchmarkRecords(
-      [vl_model],
-      [
-        f_createTestBenchmark("gpqa", 90, {
-          sourceModelId: "test/model-a",
-        }),
-      ],
-    );
-
-    expect(vl_result.unmatched[0]?.reason).toBe("duplicate-benchmark");
-    expect(vl_result.models[0]?.benchmarks[0]?.score).toBe(40);
-  });
-
-  test("attaches both benchmark types in a stable order", () => {
-    const vl_model = f_createTestModel();
-    const vl_result = f_matchBenchmarkRecords(
-      [vl_model],
-      [
-        f_createTestBenchmark("livecodebench", 30, {
-          sourceModelId: "test/model-a",
-        }),
-        f_createTestBenchmark("gpqa", 70, {
-          sourceModelId: "test/model-a",
-        }),
-      ],
-    );
-
-    expect(
-      vl_result.models[0]?.benchmarks.map((p_entry) => p_entry.benchmarkId),
-    ).toEqual(["gpqa", "livecodebench"]);
-    expect(vl_model.benchmarks).toEqual([]);
-  });
-
-  test("marks a benchmark without a source model ID as unmatched", () => {
-    const vl_result = f_matchBenchmarkRecords(
+  test("marks a benchmark without a source model ID as unmatched", async () => {
+    const vl_result = await f_matchBenchmarkRecords(
       [f_createTestModel()],
       [
-        f_createTestBenchmark("gpqa", 70, {
+        f_createTestBenchmark("llbm", 70, {
           sourceModelId: null,
         }),
       ],
@@ -234,12 +123,12 @@ describe("f_matchBenchmarkRecords", () => {
     expect(vl_result.unmatched[0]?.reason).toBe("missing-source-id");
   });
 
-  test("does not mutate the input catalog", () => {
+  test("does not mutate the input catalog", async () => {
     const vl_models = [f_createTestModel()];
-    const vl_result = f_matchBenchmarkRecords(
+    const vl_result = await f_matchBenchmarkRecords(
       vl_models,
       [
-        f_createTestBenchmark("gpqa", 70, {
+        f_createTestBenchmark("llbm", 70, {
           sourceModelId: "test/model-a",
         }),
       ],
@@ -250,144 +139,83 @@ describe("f_matchBenchmarkRecords", () => {
   });
 });
 
-describe("reviewed benchmark mappings", () => {
-  const k_mapping: BenchmarkMapping = {
-    benchmarkId: "gpqa",
-    sourceModelId: "External Alpha",
-    opencodeModelId: "test/model-a",
-    matchType: "family_proxy",
-    reason: "test mapping",
+describe("reviewed LLMBM mappings", () => {
+  const k_mapping: LlbmMapping = {
+    llbmId: "External Alpha",
+    opencodeId: "test/model-a",
+    matchType: "family_fallback",
   };
 
-  test("attaches through a mapping and records the entry kind", () => {
+  test("attaches through a mapping and records the entry kind", async () => {
     const vl_model = f_createTestModel({ modelId: "model-a" });
-    const vl_benchmark = f_createTestBenchmark("gpqa", 66, {
+    const vl_benchmark = f_createTestBenchmark("llbm", 66, {
       sourceModelId: "External Alpha",
     });
 
-    const vl_result = f_matchBenchmarkRecords([vl_model], [vl_benchmark], [], [
-      k_mapping,
-    ]);
+    const vl_result = await f_matchBenchmarkRecords([vl_model], [vl_benchmark], [], [k_mapping]);
 
     expect(vl_result.matches[0]?.strategy).toBe("mapping");
-    expect(vl_result.matches[0]?.matchType).toBe("family_proxy");
-    expect(vl_result.models[0]?.benchmarks[0]?.matchType).toBe("family_proxy");
+    expect(vl_result.matches[0]?.matchType).toBe("family_fallback");
+    expect(vl_result.models[0]?.benchmarks[0]?.matchType).toBe("family_fallback");
   });
 
-  test("records a mapping whose registry target is absent", () => {
-    const vl_result = f_matchBenchmarkRecords(
+  test("records a mapping whose registry target is absent", async () => {
+    const vl_result = await f_matchBenchmarkRecords(
       [f_createTestModel({ modelId: "model-a" })],
-      [f_createTestBenchmark("gpqa", 66, { sourceModelId: "External Alpha" })],
+      [f_createTestBenchmark("llbm", 66, { sourceModelId: "External Alpha" })],
       [],
-      [{ ...k_mapping, opencodeModelId: "test/missing" }],
+      [{ ...k_mapping, opencodeId: "test/missing" }],
     );
 
     expect(vl_result.unmatched[0]?.reason).toBe("mapping-target-missing");
   });
 
-  test("drops ambiguous duplicate mapping keys", () => {
-    const vl_result = f_matchBenchmarkRecords(
-      [f_createTestModel({ modelId: "model-a" })],
-      [f_createTestBenchmark("gpqa", 66, { sourceModelId: "External Alpha" })],
-      [],
-      [k_mapping, { ...k_mapping, opencodeModelId: "test/model-b" }],
-    );
-
-    expect(vl_result.matches).toHaveLength(0);
-    expect(vl_result.unmatched[0]?.reason).toBe("no-match");
-  });
-
-  test("mapping runs before normalized matching", () => {
+  test("mapping runs before normalized matching", async () => {
     const vl_model = f_createTestModel({ modelId: "model-a" });
-    const vl_benchmark = f_createTestBenchmark("gpqa", 66, {
+    const vl_benchmark = f_createTestBenchmark("llbm", 66, {
       sourceModelId: "MODEL_A",
     });
 
-    const vl_result = f_matchBenchmarkRecords([vl_model], [vl_benchmark], [], [
-      { ...k_mapping, sourceModelId: "MODEL_A", matchType: "version_proxy" },
-    ]);
+    const vl_result = await f_matchBenchmarkRecords([vl_model], [vl_benchmark], [], [{ ...k_mapping, llbmId: "MODEL_A", matchType: "family_fallback" }]);
 
     expect(vl_result.matches[0]?.strategy).toBe("mapping");
-    expect(vl_result.matches[0]?.matchType).toBe("version_proxy");
-  });
-});
-
-describe("seeded production mappings (defaults)", () => {
-  test("attach the three owner-verified GPQA rows without explicit inputs", () => {
-    const vl_models = [
-      f_createTestModel({
-        id: "opencode/kimi-k2.6",
-        providerId: "opencode",
-        modelId: "kimi-k2.6",
-      }),
-      f_createTestModel({
-        id: "opencode/kimi-k2.5",
-        providerId: "opencode",
-        modelId: "kimi-k2.5",
-      }),
-      f_createTestModel({
-        id: "opencode/qwen3.5-plus",
-        providerId: "opencode",
-        modelId: "qwen3.5-plus",
-      }),
-    ];
-    const vl_benchmarks = [
-      f_createTestBenchmark("gpqa", 90.5, { sourceModelId: "moonshotai/Kimi-K2.6" }),
-      f_createTestBenchmark("gpqa", 87.6, { sourceModelId: "moonshotai/Kimi-K2.5" }),
-      f_createTestBenchmark("gpqa", 88.4, { sourceModelId: "Qwen/Qwen3.5-397B-A17B" }),
-    ];
-
-    const vl_result = f_matchBenchmarkRecords(vl_models, vl_benchmarks);
-
-    expect(vl_result.matches).toHaveLength(3);
-    expect(vl_result.matches.every((p_match) => p_match.strategy === "mapping")).toBe(true);
-    expect(vl_result.matches[2]?.matchType).toBe("family_proxy");
-    const vl_qwen = vl_result.models.find(
-      (p_model) => p_model.id === "opencode/qwen3.5-plus",
-    );
-    expect(vl_qwen?.benchmarks[0]?.matchType).toBe("family_proxy");
+    expect(vl_result.matches[0]?.matchType).toBe("family_fallback");
   });
 });
 
 describe("casefolded mapping lookup", () => {
-  const k_foldMappings: readonly BenchmarkMapping[] = [
+  const k_foldMappings: readonly LlbmMapping[] = [
     {
-      benchmarkId: "gpqa",
-      sourceModelId: "Kimi-K2.6",
-      opencodeModelId: "test/model-a",
-      matchType: "alias",
-      reason: "test",
+      llbmId: "Kimi-K2.6",
+      opencodeId: "test/model-a",
+      matchType: "exact",
     },
   ];
 
-  test("casefolded fallback attaches when the exact string misses", () => {
-    const vl_result = f_matchBenchmarkRecords(
+  test("casefolded fallback attaches when the exact string misses", async () => {
+    const vl_result = await f_matchBenchmarkRecords(
       [f_createTestModel({ id: "test/model-a" })],
-      [f_createTestBenchmark("gpqa", 90.5, { sourceModelId: "kimi-k2.6" })],
+      [f_createTestBenchmark("llbm", 90.5, { sourceModelId: "kimi-k2.6" })],
       [],
       k_foldMappings,
     );
 
     expect(vl_result.matches).toHaveLength(1);
     expect(vl_result.matches[0]?.strategy).toBe("mapping");
-    expect(vl_result.matches[0]?.matchType).toBe("alias");
+    expect(vl_result.matches[0]?.matchType).toBe("exact");
   });
 
-  test("exact entries win; an ambiguous casefold key resolves nothing", () => {
-    const vl_mappings: readonly BenchmarkMapping[] = [
+  test("exact entries win; an ambiguous casefold key resolves nothing", async () => {
+    const vl_mappings: readonly LlbmMapping[] = [
       {
-        benchmarkId: "gpqa",
-        sourceModelId: "Foo",
-        opencodeModelId: "test/model-a",
-        matchType: "alias",
-        reason: "test",
+        llbmId: "Foo",
+        opencodeId: "test/model-a",
+        matchType: "exact",
       },
       {
-        benchmarkId: "gpqa",
-        sourceModelId: "foo",
-        opencodeModelId: "test/model-b",
-        matchType: "family_proxy",
-        reason: "test",
+        llbmId: "foo",
+        opencodeId: "test/model-b",
+        matchType: "family_fallback",
       },
     ];
     const vl_models = [
@@ -395,25 +223,25 @@ describe("casefolded mapping lookup", () => {
       f_createTestModel({ id: "test/model-b" }),
     ];
 
-    const vl_upper = f_matchBenchmarkRecords(
+    const vl_upper = await f_matchBenchmarkRecords(
       vl_models,
-      [f_createTestBenchmark("gpqa", 90, { sourceModelId: "Foo" })],
+      [f_createTestBenchmark("llbm", 90, { sourceModelId: "Foo" })],
       [],
       vl_mappings,
     );
     expect(vl_upper.matches[0]?.modelId).toBe("test/model-a");
 
-    const vl_lower = f_matchBenchmarkRecords(
+    const vl_lower = await f_matchBenchmarkRecords(
       vl_models,
-      [f_createTestBenchmark("gpqa", 90, { sourceModelId: "foo" })],
+      [f_createTestBenchmark("llbm", 90, { sourceModelId: "foo" })],
       [],
       vl_mappings,
     );
     expect(vl_lower.matches[0]?.modelId).toBe("test/model-b");
 
-    const vl_other = f_matchBenchmarkRecords(
+    const vl_other = await f_matchBenchmarkRecords(
       vl_models,
-      [f_createTestBenchmark("gpqa", 90, { sourceModelId: "FOO" })],
+      [f_createTestBenchmark("llbm", 90, { sourceModelId: "FOO" })],
       [],
       vl_mappings,
     );
@@ -421,35 +249,105 @@ describe("casefolded mapping lookup", () => {
     expect(vl_other.unmatched[0]?.reason).toBe("no-match");
   });
 
-  test("duplicate identical sources drop from both views", () => {
-    const vl_mappings: readonly BenchmarkMapping[] = [
+  test("duplicate identical sources drop from both views", async () => {
+    const vl_mappings: readonly LlbmMapping[] = [
       {
-        benchmarkId: "gpqa",
-        sourceModelId: "Dup",
-        opencodeModelId: "test/model-a",
-        matchType: "alias",
-        reason: "test",
+        llbmId: "Dup",
+        opencodeId: "test/model-a",
+        matchType: "exact",
       },
       {
-        benchmarkId: "gpqa",
-        sourceModelId: "Dup",
-        opencodeModelId: "test/model-b",
-        matchType: "alias",
-        reason: "test",
+        llbmId: "Dup",
+        opencodeId: "test/model-b",
+        matchType: "exact",
       },
     ];
 
-    const vl_result = f_matchBenchmarkRecords(
+    const vl_result = await f_matchBenchmarkRecords(
       [
         f_createTestModel({ id: "test/model-a" }),
         f_createTestModel({ id: "test/model-b" }),
       ],
-      [f_createTestBenchmark("gpqa", 90, { sourceModelId: "Dup" })],
+      [f_createTestBenchmark("llbm", 90, { sourceModelId: "Dup" })],
       [],
       vl_mappings,
     );
 
     expect(vl_result.matches).toHaveLength(0);
     expect(vl_result.unmatched[0]?.reason).toBe("no-match");
+  });
+});
+
+describe("seeded production mappings (defaults)", () => {
+  test("attach regenerated LLMBM rows without explicit inputs", async () => {
+    const vl_models = [
+      f_createTestModel({
+        id: "opencode/kimi-k2.6",
+        providerId: "opencode",
+        modelId: "kimi-k2.6",
+      }),
+      f_createTestModel({
+        id: "opencode/claude-fable-5",
+        providerId: "opencode",
+        modelId: "claude-fable-5",
+      }),
+      f_createTestModel({
+        id: "opencode/nemotron-3.5-lightning-free",
+        providerId: "opencode",
+        modelId: "nemotron-3.5-lightning-free",
+      }),
+      f_createTestModel({
+        id: "opencode/glm-5.3-flash",
+        providerId: "opencode",
+        modelId: "glm-5.3-flash",
+      }),
+      f_createTestModel({
+        id: "opencode/glm-5.3-flash-free",
+        providerId: "opencode",
+        modelId: "glm-5.3-flash-free",
+      }),
+    ];
+    const vl_benchmarks = [
+      f_createTestBenchmark("llbm", 61.8, {
+        sourceModelId: "moonshotai/kimi-k2.6",
+      }),
+      f_createTestBenchmark("llbm", 76.5, {
+        sourceModelId: "anthropic/claude-fable-5",
+      }),
+      f_createTestBenchmark("llbm", 26.8, {
+        sourceModelId: "nvidia/nemotron-3.5-lightning",
+      }),
+      f_createTestBenchmark("llbm", 71.5, {
+        sourceModelId: "z-ai/glm-5.3-flash",
+      }),
+    ];
+
+    const vl_result = await f_matchBenchmarkRecords(vl_models, vl_benchmarks);
+
+    expect(vl_result.matches).toHaveLength(4);
+    expect(
+      vl_result.matches.every((p_match) => p_match.strategy === "mapping"),
+    ).toBe(true);
+
+    const vl_nemotron = vl_result.models.find(
+      (p_model) => p_model.id === "opencode/nemotron-3.5-lightning-free",
+    );
+    expect(vl_nemotron?.benchmarks[0]?.matchType).toBe("family_fallback");
+
+    const vl_kimi = vl_result.models.find(
+      (p_model) => p_model.id === "opencode/kimi-k2.6",
+    );
+    expect(vl_kimi?.benchmarks[0]?.matchType).toBe("exact");
+
+    // The shared `z-ai/glm-5.3-flash` source id prefers the exact entry, so
+    // the paid model is scored and the `-free` sibling stays unmatched.
+    const vl_glmPaid = vl_result.models.find(
+      (p_model) => p_model.id === "opencode/glm-5.3-flash",
+    );
+    expect(vl_glmPaid?.benchmarks[0]?.matchType).toBe("exact");
+    const vl_glmFree = vl_result.models.find(
+      (p_model) => p_model.id === "opencode/glm-5.3-flash-free",
+    );
+    expect(vl_glmFree?.benchmarks).toHaveLength(0);
   });
 });

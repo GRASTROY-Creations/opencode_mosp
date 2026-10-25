@@ -27,8 +27,7 @@ the reference for what is stored, where it lives, and how staleness is handled.
 | Source key | Payload | Written by | Default TTL |
 |---|---|---|---|
 | `opencode-models` | `ModelRecord[]` from the registry adapter (fallback for host-first reads) | model refresh | 1 hour |
-| `gpqa` | `ModelBenchmark[]` (GPQA Diamond) | GPQA refresh | 6 hours |
-| `livecodebench` | `ModelBenchmark[]` (generation window) | LiveCodeBench refresh | 6 hours |
+| `llbm` | `ModelBenchmark[]` (LLMBM export, metric `aa_coding_index` unless `OPENCODE_LLM_BENCH_METRIC` overrides) | LLMBM refresh | 6 hours |
 | `models-dev` | `ModelsDevCrosswalk` (`opencode/<modelId>` → name/family/release date) | models.dev refresh | 6 hours |
 
 `opencode-pricing` is a **derived status view**, not a cache entry: the
@@ -49,7 +48,7 @@ Each entry is stored as a versioned envelope:
 ```jsonc
 {
   "schemaVersion": 1,          // k_cacheSchemaVersion
-  "source": "gpqa",            // must match the file/key
+  "source": "llbm",             // must match the file/key
   "fetchedAt": "2026-10-24T12:00:00.000Z",
   "ttlMs": 21600000,
   "payload": [ /* untrusted source rows */ ]
@@ -94,8 +93,7 @@ environment for tests and tooling.
 
 `f_refreshModelOverview(options)`:
 
-1. Read all four cache-backed sources (models, gpqa, livecodebench,
-   models-dev).
+1. Read all three cache-backed sources (models, llbm, models-dev).
 2. For each source, decide `fh_shouldRefresh` — forced, not fresh, empty, or
    missing.
 3. Run the selected source jobs in parallel through injected loaders.

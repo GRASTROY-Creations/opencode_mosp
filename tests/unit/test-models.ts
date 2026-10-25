@@ -5,15 +5,14 @@
  */
 
 import {
-  k_gpqaVariant,
-  k_livecodebenchVariant,
+  k_llbmMetric,
   type BenchmarkId,
   type ModelBenchmark,
 } from "../../src/domain/model-benchmark";
 import type {
   ModelPricingTier,
 } from "../../src/domain/model-pricing";
-import type { ModelRecord } from "../../src/domain/model-record";
+import type { ModelRecord, ModelSource } from "../../src/domain/model-record";
 
 export interface TestModelOptions {
   readonly id?: string;
@@ -28,6 +27,7 @@ export interface TestModelOptions {
   readonly outputPrice?: number | null;
   readonly tiers?: readonly ModelPricingTier[];
   readonly benchmarks?: readonly ModelBenchmark[];
+  readonly source?: ModelSource;
 }
 
 export function f_createTestModel(
@@ -56,7 +56,7 @@ export function f_createTestModel(
       tiers: p_options.tiers ?? [],
     },
     benchmarks: p_options.benchmarks ?? [],
-    source: "merged",
+    source: p_options.source ?? "merged",
     lastUpdatedAt: "2026-10-24T00:00:00.000Z",
   };
 }
@@ -68,10 +68,7 @@ export function f_createTestBenchmark(
 ): ModelBenchmark {
   return {
     benchmarkId: p_benchmarkId,
-    variant:
-      p_benchmarkId === "gpqa"
-        ? k_gpqaVariant
-        : k_livecodebenchVariant,
+    variant: k_llbmMetric,
     score: p_score,
     scoreUnit: "percent",
     rank: null,

@@ -144,7 +144,7 @@ Keys used by the panel (preferences are never mixed with cached data):
 | Key | Kind | Shape |
 |---|---|---|
 | `model-overview.preferences` | `store` | `{ sortKey, sortDirection, ranking, collapsed }` |
-| `model-overview.filters` | `memory` | `{ freeOnly, missingGpqa, missingLiveCodeBench }` |
+| `model-overview.filters` | `memory` | `{ freeOnly }` |
 
 A stored shape from an older version is normalized once back to defaults at
 startup. Benchmark/model data lives only in the file cache
@@ -197,19 +197,19 @@ startup. Benchmark/model data lives only in the file cache
 
 1. `session.panel` renders a bordered, titled table with a header row that is
    clickable only when header-click collapse is enabled (see item 7) and a
-   filter row containing only the `[free]` chip (search and the `missing GPQA` /
-   `missing LCB` / `[redraw]` chips were removed; data updates run through
+   filter row containing only the `[free]` chip (search, the benchmark-presence
+   and `[redraw]` chips were removed; data updates run through
    `/mosp update`, view repaints through `/mosp redraw`). Selectable chips
    render through `f_formatChipLabel(selected, false, label)`: `[>>free]` when
    active, `[free]` otherwise (hover state is never visualized).
-2. Columns: Model, Provider, Ctx, In $/M, Out $/M, GPQA, LCB — each column header
+2. Columns: Model, Provider, Ctx, In $/M, Out $/M, LLBM — each column header
    is clickable and shows `▲`/`▼` when active. Ctx sorts numerically and defaults
    to descending; release-date and benchmark-score columns also default to
    descending, everything else ascending; missing values always sort last. The
    price columns are 10 cells wide so `Out $/M ▲` stays on one line (an 8-wide
    column wrapped the arrow). Missing values render as `—`; benchmark cells show
-   `#rank score`; proxy-mapped rows (`version_proxy`/`family_proxy`) get a `~`
-   prefix and are never presented as the model's own score.
+   `#rank score`; `family_fallback`-mapped rows get a `~` prefix and are never
+   presented as the model's own score.
 3. Rows come from the controller's derived memo: the active filters (only the
    free chip remains in the UI; provider/presence filters stay available at the
    service layer), then the non-mutating comparator; missing values sort last
@@ -217,10 +217,9 @@ startup. Benchmark/model data lives only in the file cache
 4. Footer shows aggregate state, shortened per-source states, last refresh, and
    warning count; empty cache shows `no cached data — run /mosp
    update`, filtered-to-nothing shows a distinct message.
-5. `sidebar.content` shows `◫ N models · GPQA #rank name score · panel
-   open|closed · /mosp`. The leader defaults to the GPQA ranking; when the
-   active sort column belongs to a benchmark, the sidebar follows that
-   benchmark instead.
+5. `sidebar.content` shows `◫ N models · LLBM #rank name score · panel
+   open|closed · /mosp` (or `no LLBM data` when nothing is ranked). The leader
+   is the best-ranked model by the active LLBM metric.
 6. When header-click collapse is enabled, collapse state survives panel toggles;
    sorting and the free filter always survive toggles and collapse; repeated
    toggles never fetch.

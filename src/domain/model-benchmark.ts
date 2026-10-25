@@ -1,9 +1,9 @@
 /**
  * Normalized benchmark contract.
  *
+ * The single benchmark source is LLMBM (LLM Benchmark) with the 'coding' metric.
  * Score and rank are deliberately separate values:
- * - `score` is the source's reported value (GPQA accuracy or LiveCodeBench
- *   pass@1), on a 0-100 percent scale for both verified sources.
+ * - `score` is the source's reported value on a 0-100 percent scale.
  * - `rank` is a 1-based position under the selected benchmark's ranking rules.
  *   It is `null` when no defensible rank can be computed.
  *
@@ -27,38 +27,30 @@ import {
   type DomainResult,
 } from "./guards";
 
-/** Benchmarks supported in 0.1.0. */
-export type BenchmarkId = "gpqa" | "livecodebench";
+/** The single benchmark supported. */
+export type BenchmarkId = "llbm";
 
 /** Runtime list used by parsers and UI selectors. */
 export const k_benchmarkIds: readonly BenchmarkId[] = [
-  "gpqa",
-  "livecodebench",
+  "llbm",
 ];
 
-/**
- * The selected GPQA subset (Hugging Face `gpqa_diamond`). Kept as the variant
- * identifier so future subsets cannot be mixed into one ranking silently.
- */
-export const k_gpqaVariant = "gpqa_diamond";
-
-/** LiveCodeBench generation-leaderboard snapshot (pass@1 over a date window). */
-export const k_livecodebenchVariant = "generation";
+/** The LLMBM metric (coding, overall, etc.). */
+export const k_llbmMetric = "coding";
 
 /**
  * How a benchmark row relates to a registry model.
  *
- * `exact`/`alias` describe the model itself; `version_proxy`/`family_proxy`
- * describe a sibling version/family entry used as a stand-in and must never be
- * presented as the model's own score (the UI marks those rows with `~`).
+ * `exact`/`alias` describe the model itself; `family_fallback` describes a
+ * sibling version/family entry used as a stand-in and must never be presented
+ * as the model's own score (the UI marks those rows with `~`).
  */
-export type BenchmarkMatchType = "exact" | "alias" | "version_proxy" | "family_proxy";
+export type BenchmarkMatchType = "exact" | "alias" | "family_fallback";
 
 export const k_benchmarkMatchTypes: readonly BenchmarkMatchType[] = [
   "exact",
   "alias",
-  "version_proxy",
-  "family_proxy",
+  "family_fallback",
 ];
 
 export function f_isBenchmarkMatchType(p_value: unknown): p_value is BenchmarkMatchType {
@@ -78,7 +70,7 @@ function fh_parseNullableMatchType(
 /** One normalized benchmark result for one model. */
 export interface ModelBenchmark {
   readonly benchmarkId: BenchmarkId;
-  /** Source subset/protocol identifier, e.g. `gpqa_diamond` or `generation`. */
+  /** Source subset/protocol identifier, e.g. `llbm-coding`. */
   readonly variant: string;
   /** Reported score on a 0-100 percent scale; `null` if unavailable. */
   readonly score: number | null;

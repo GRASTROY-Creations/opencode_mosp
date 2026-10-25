@@ -3,11 +3,11 @@
  *
  * The comparator itself lives in Phase 4 (`ranking.ts`). This module only
  * defines the vocabulary and the defaults mandated by the specification:
- * primary sort `gpqaRank`, ascending, GPQA as the primary ranking mode.
+ * primary sort `llbmRank`, ascending, LLMBM as the primary ranking mode.
  */
 
-/** Which benchmark drives the rank column and ranking selector. */
-export type RankingMode = "gpqa" | "livecodebench";
+/** The single benchmark that drives the rank column and ranking selector. */
+export type RankingMode = "llbm";
 
 /** Direction of the active sort column. */
 export type SortDirection = "asc" | "desc";
@@ -21,10 +21,8 @@ export type ModelSortKey =
   | "providerName"
   | "releaseDate"
   | "contextWindow"
-  | "gpqaScore"
-  | "gpqaRank"
-  | "livecodebenchScore"
-  | "livecodebenchRank"
+  | "llbmScore"
+  | "llbmRank"
   | "inputPrice"
   | "outputPrice";
 
@@ -34,28 +32,25 @@ export const k_modelSortKeys: readonly ModelSortKey[] = [
   "providerName",
   "releaseDate",
   "contextWindow",
-  "gpqaScore",
-  "gpqaRank",
-  "livecodebenchScore",
-  "livecodebenchRank",
+  "llbmScore",
+  "llbmRank",
   "inputPrice",
   "outputPrice",
 ];
 
 /** Registry of ranking modes. */
 export const k_rankingModes: readonly RankingMode[] = [
-  "gpqa",
-  "livecodebench",
+  "llbm",
 ];
 
 /** Registry of sort directions. */
 export const k_sortDirections: readonly SortDirection[] = ["asc", "desc"];
 
-/** Specification default: rank by GPQA. */
-export const k_defaultRankingMode: RankingMode = "gpqa";
+/** Specification default: rank by LLMBM. */
+export const k_defaultRankingMode: RankingMode = "llbm";
 
-/** Specification default: GPQA rank ascending (rank 1 first). */
-export const k_defaultSortKey: ModelSortKey = "gpqaRank";
+/** Specification default: LLMBM rank ascending (rank 1 first). */
+export const k_defaultSortKey: ModelSortKey = "llbmRank";
 
 /** Specification default direction for the primary sort. */
 export const k_defaultSortDirection: SortDirection = "asc";

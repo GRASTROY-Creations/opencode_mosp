@@ -61,11 +61,10 @@ import {
   type BenchmarkMatch,
   type UnmatchedBenchmark,
 } from "./model-matching";
-import { f_assignBenchmarkRanks } from "./ranking";
+import { f_assignBenchmarkRanks, f_sortModels } from "./ranking";
+import { f_filterModels } from "./model-filter";
 
-export { f_matchBenchmarkRecords };
-export { f_sortModels } from "./ranking";
-export { f_filterModels } from "./model-filter";
+export { f_matchBenchmarkRecords, f_sortModels, f_filterModels };
 
 /** Default request budget when a caller does not supply one. */
 export const k_defaultRequestTimeoutMs = 10_000;
@@ -102,8 +101,7 @@ export interface OverviewReadOptions {
 /** Options for an explicit refresh. */
 export interface OverviewRefreshOptions extends OverviewReadOptions {
   readonly loadModels: OverviewModelLoader;
-  readonly loadGpqa: OverviewBenchmarkLoader;
-  readonly loadLiveCodeBench: OverviewBenchmarkLoader;
+  readonly loadLlbm: OverviewBenchmarkLoader;
   readonly loadModelsDev: OverviewModelsDevLoader;
   /** Ignore TTLs and fetch every source again. */
   readonly force?: boolean;
@@ -161,23 +159,18 @@ export async function f_getModelOverview(
   p_options: OverviewReadOptions,
 ): Promise<ModelOverviewSnapshot> {
   const vl_now = fh_resolveNow(p_options.now);
-  const [vl_models, vl_gpqa, vl_liveCodeBench, vl_modelsDev] =
+  const [vl_models, vl_llbm, vl_modelsDev] =
     await fh_readAllSources(p_options.cache, vl_now);
 
-  return fh_assembleSnapshot(
+  return await fh_assembleSnapshot(
     vl_models,
-    vl_gpqa,
-    vl_liveCodeBench,
+    vl_llbm,
     vl_modelsDev,
     p_options.cache.key,
     [],
   );
 }
 
-/**
- * Refresh sources whose cache is missing, stale, or forced, then return the
- * merged snapshot. Failures preserve existing cache entries (last-known-good).
- */
 /**
  * Host-first read (Adjustment 17): the live OpenCode location catalog wins when
  * it parses and is non-empty; otherwise the cached model entry is used. The
@@ -213,16 +206,14 @@ export async function f_getModelOverviewFromHost(
     vl_models = await fh_readModels(p_options.cache, vl_now);
   }
 
-  const [vl_gpqa, vl_liveCodeBench, vl_modelsDev] = await Promise.all([
-    fh_readBenchmarks(p_options.cache, "gpqa", vl_now),
-    fh_readBenchmarks(p_options.cache, "livecodebench", vl_now),
+  const [vl_llbm, vl_modelsDev] = await Promise.all([
+    fh_readBenchmarks(p_options.cache, "llbm", vl_now),
     fh_readModelsDev(p_options.cache, vl_now),
   ]);
 
-  return fh_assembleSnapshot(
+  return await fh_assembleSnapshot(
     vl_models,
-    vl_gpqa,
-    vl_liveCodeBench,
+    vl_llbm,
     vl_modelsDev,
     p_options.cache.key,
     vl_warnings,
@@ -259,7 +250,7 @@ export async function f_getOverviewStatus(
   p_options: OverviewReadOptions,
 ): Promise<ModelOverviewStatus> {
   const vl_now = fh_resolveNow(p_options.now);
-  const [vl_models, vl_gpqa, vl_liveCodeBench, vl_modelsDev] =
+  const [vl_models, vl_llbm, vl_modelsDev] =
     await fh_readAllSources(p_options.cache, vl_now);
   const vl_merged = f_mergeModelSources([
     vl_models.value === null ? [] : vl_models.value,
@@ -268,8 +259,7 @@ export async function f_getOverviewStatus(
   return fh_buildStatus(
     p_options.cache.key,
     vl_models,
-    vl_gpqa,
-    vl_liveCodeBench,
+    vl_llbm,
     vl_modelsDev,
     vl_merged,
   );
@@ -353,7 +343,7 @@ async function fh_performRefresh(
   const vl_force = p_options.force === true;
   const vl_warnings: OverviewWarning[] = [];
 
-  let [vl_models, vl_gpqa, vl_liveCodeBench, vl_modelsDev] =
+  let [vl_models, vl_llbm, vl_modelsDev] =
     await fh_readAllSources(p_options.cache, vl_now);
 
   const vl_jobs: RefreshJob[] = [];
@@ -404,37 +394,36 @@ async function fh_performRefresh(
     });
   }
 
-  if (fh_shouldRefresh(vl_gpqa, vl_force)) {
+  if (fh_shouldRefresh(vl_llbm, vl_force)) {
     vl_jobs.push({
-      source: "gpqa",
+      source: "llbm",
       run: async (): Promise<void> => {
-        fh_recordAttempt(p_options.cache.key, "gpqa", vl_nowIso);
+        fh_recordAttempt(p_options.cache.key, "llbm", vl_nowIso);
         const vl_result = await fh_runBenchmarkLoader(
-          p_options.loadGpqa,
-          "gpqa",
+          p_options.loadLlbm,
           vl_context,
         );
 
-        vl_warnings.push(...fh_mapWarnings("gpqa", vl_result.warnings));
+        vl_warnings.push(...fh_mapWarnings("llbm", vl_result.warnings));
 
         if (!vl_result.ok) {
-          vl_gpqa = fh_applyFailure(vl_gpqa, vl_result.error, vl_nowIso);
+          vl_llbm = fh_applyFailure(vl_llbm, vl_result.error, vl_nowIso);
           return;
         }
 
         if (vl_result.value.length === 0) {
-          vl_gpqa = fh_applyFailure(
-            vl_gpqa,
-            "GPQA returned no benchmark rows",
+          vl_llbm = fh_applyFailure(
+            vl_llbm,
+            "LLMBM returned no benchmark rows",
             vl_nowIso,
           );
           return;
         }
 
-        vl_gpqa = fh_applySuccess(vl_result.value, vl_nowIso);
+        vl_llbm = fh_applySuccess(vl_result.value, vl_nowIso);
 
         const vl_write = await p_options.cache.write(
-          "gpqa",
+          "llbm",
           vl_result.value,
           vl_now,
           vl_benchmarkTtlMs,
@@ -442,67 +431,7 @@ async function fh_performRefresh(
 
         if (!vl_write.ok) {
           vl_warnings.push({
-            source: "gpqa",
-            code: "cache-write",
-            message: vl_write.error,
-          });
-        }
-      },
-    });
-  }
-
-  if (fh_shouldRefresh(vl_liveCodeBench, vl_force)) {
-    vl_jobs.push({
-      source: "livecodebench",
-      run: async (): Promise<void> => {
-        fh_recordAttempt(
-          p_options.cache.key,
-          "livecodebench",
-          vl_nowIso,
-        );
-        const vl_result = await fh_runBenchmarkLoader(
-          p_options.loadLiveCodeBench,
-          "livecodebench",
-          vl_context,
-        );
-
-        vl_warnings.push(
-          ...fh_mapWarnings("livecodebench", vl_result.warnings),
-        );
-
-        if (!vl_result.ok) {
-          vl_liveCodeBench = fh_applyFailure(
-            vl_liveCodeBench,
-            vl_result.error,
-            vl_nowIso,
-          );
-          return;
-        }
-
-        if (vl_result.value.length === 0) {
-          vl_liveCodeBench = fh_applyFailure(
-            vl_liveCodeBench,
-            "LiveCodeBench returned no benchmark rows",
-            vl_nowIso,
-          );
-          return;
-        }
-
-        vl_liveCodeBench = fh_applySuccess(
-          vl_result.value,
-          vl_nowIso,
-        );
-
-        const vl_write = await p_options.cache.write(
-          "livecodebench",
-          vl_result.value,
-          vl_now,
-          vl_benchmarkTtlMs,
-        );
-
-        if (!vl_write.ok) {
-          vl_warnings.push({
-            source: "livecodebench",
+            source: "llbm",
             code: "cache-write",
             message: vl_write.error,
           });
@@ -524,15 +453,12 @@ async function fh_performRefresh(
         vl_warnings.push(...fh_mapWarnings("models-dev", vl_result.warnings));
 
         if (!vl_result.ok) {
-          vl_modelsDev = fh_applyFailure(
-            vl_modelsDev,
-            vl_result.error,
-            vl_nowIso,
-          );
+          vl_modelsDev = fh_applyFailure(vl_modelsDev, vl_result.error, vl_nowIso);
           return;
         }
 
-        if (Object.keys(vl_result.value).length === 0) {
+        const vl_crosswalk = vl_result.value;
+        if (Object.keys(vl_crosswalk).length === 0) {
           vl_modelsDev = fh_applyFailure(
             vl_modelsDev,
             "models.dev returned no models",
@@ -541,11 +467,11 @@ async function fh_performRefresh(
           return;
         }
 
-        vl_modelsDev = fh_applySuccess(vl_result.value, vl_nowIso);
+        vl_modelsDev = fh_applySuccess(vl_crosswalk, vl_nowIso);
 
         const vl_write = await p_options.cache.write(
           "models-dev",
-          vl_result.value,
+          vl_crosswalk,
           vl_now,
           vl_benchmarkTtlMs,
         );
@@ -563,31 +489,27 @@ async function fh_performRefresh(
 
   await Promise.all(vl_jobs.map((p_job) => p_job.run()));
 
-  return fh_assembleSnapshot(
+  return await fh_assembleSnapshot(
     vl_models,
-    vl_gpqa,
-    vl_liveCodeBench,
+    vl_llbm,
     vl_modelsDev,
     p_options.cache.key,
     vl_warnings,
   );
 }
 
-function fh_assembleSnapshot(
+async function fh_assembleSnapshot(
   p_models: SourceRead<readonly ModelRecord[]>,
-  p_gpqa: SourceRead<readonly ModelBenchmark[]>,
-  p_liveCodeBench: SourceRead<readonly ModelBenchmark[]>,
+  p_llbm: SourceRead<readonly ModelBenchmark[]>,
   p_modelsDev: SourceRead<ModelsDevCrosswalk>,
   p_cacheKey: string,
   p_warnings: readonly OverviewWarning[],
-): ModelOverviewSnapshot {
+): Promise<ModelOverviewSnapshot> {
   const vl_sourceModels = p_models.value === null ? [] : p_models.value;
   const vl_merged = f_mergeModelSources([vl_sourceModels]);
-  const vl_benchmarks: readonly ModelBenchmark[] = [
-    ...(p_gpqa.value === null ? [] : p_gpqa.value),
-    ...(p_liveCodeBench.value === null ? [] : p_liveCodeBench.value),
-  ];
-  const vl_match = f_matchBenchmarkRecords(vl_merged, vl_benchmarks);
+  const vl_benchmarks: readonly ModelBenchmark[] =
+    p_llbm.value === null ? [] : p_llbm.value;
+  const vl_match = await f_matchBenchmarkRecords(vl_merged, vl_benchmarks);
   const vl_ranked = f_assignBenchmarkRanks(vl_match.models);
 
   return {
@@ -595,8 +517,7 @@ function fh_assembleSnapshot(
     status: fh_buildStatus(
       p_cacheKey,
       p_models,
-      p_gpqa,
-      p_liveCodeBench,
+      p_llbm,
       p_modelsDev,
       vl_ranked,
     ),
@@ -609,25 +530,22 @@ function fh_assembleSnapshot(
 function fh_buildStatus(
   p_cacheKey: string,
   p_models: SourceRead<readonly ModelRecord[]>,
-  p_gpqa: SourceRead<readonly ModelBenchmark[]>,
-  p_liveCodeBench: SourceRead<readonly ModelBenchmark[]>,
+  p_llbm: SourceRead<readonly ModelBenchmark[]>,
   p_modelsDev: SourceRead<ModelsDevCrosswalk>,
   p_rankedModels: readonly ModelRecord[],
 ): ModelOverviewStatus {
   const vl_sources: readonly SourceStatus[] = [
     fh_createStatus("opencode-models", p_models, p_cacheKey),
     fh_createPricingStatus(p_models, p_rankedModels, p_cacheKey),
-    fh_createStatus("gpqa", p_gpqa, p_cacheKey),
-    fh_createStatus("livecodebench", p_liveCodeBench, p_cacheKey),
+    fh_createStatus("llbm", p_llbm, p_cacheKey),
     fh_createStatus("models-dev", p_modelsDev, p_cacheKey),
   ];
 
   return {
-    state: fh_deriveOverviewState(p_models, p_gpqa, p_liveCodeBench, vl_sources),
+    state: fh_deriveOverviewState(p_models, p_llbm, vl_sources),
     lastRefreshAt: fh_latestFetchedAt([
       p_models.fetchedAt,
-      p_gpqa.fetchedAt,
-      p_liveCodeBench.fetchedAt,
+      p_llbm.fetchedAt,
       p_modelsDev.fetchedAt,
     ]),
     sources: vl_sources,
@@ -695,15 +613,13 @@ function fh_createPricingStatus(
 
 function fh_deriveOverviewState(
   p_models: SourceRead<readonly ModelRecord[]>,
-  p_gpqa: SourceRead<readonly ModelBenchmark[]>,
-  p_liveCodeBench: SourceRead<readonly ModelBenchmark[]>,
+  p_llbm: SourceRead<readonly ModelBenchmark[]>,
   p_sources: readonly SourceStatus[],
 ): OverviewState {
   if (p_models.value === null) {
     if (
       p_models.state === "error" ||
-      p_gpqa.value !== null ||
-      p_liveCodeBench.value !== null
+      p_llbm.state === "error"
     ) {
       return "error";
     }
@@ -734,14 +650,12 @@ async function fh_readAllSources(
   [
     SourceRead<readonly ModelRecord[]>,
     SourceRead<readonly ModelBenchmark[]>,
-    SourceRead<readonly ModelBenchmark[]>,
     SourceRead<ModelsDevCrosswalk>,
   ]
 > {
   return Promise.all([
     fh_readModels(p_cache, p_now),
-    fh_readBenchmarks(p_cache, "gpqa", p_now),
-    fh_readBenchmarks(p_cache, "livecodebench", p_now),
+    fh_readBenchmarks(p_cache, "llbm", p_now),
     fh_readModelsDev(p_cache, p_now),
   ]);
 }
@@ -912,7 +826,7 @@ function fh_parseCachedBenchmarks(
 
     if (vl_benchmark.value.benchmarkId !== p_benchmarkId) {
       return f_fail(
-        `cached benchmarks for ${p_benchmarkId} contain ${vl_benchmark.value.benchmarkId}`,
+        `cached benchmarks for ${String(p_benchmarkId)} contain ${String(vl_benchmark.value.benchmarkId)}`,
       );
     }
 
@@ -978,7 +892,10 @@ function fh_failedRead<T>(
   };
 }
 
-function fh_applySuccess<T>(p_value: T, p_nowIso: string): SourceRead<T> {
+function fh_applySuccess<T>(
+  p_value: T,
+  p_nowIso: string,
+): SourceRead<T> {
   return {
     value: p_value,
     fetchedAt: p_nowIso,
@@ -1049,13 +966,12 @@ async function fh_runModelsDevLoader(
 
 async function fh_runBenchmarkLoader(
   p_loader: OverviewBenchmarkLoader,
-  p_source: BenchmarkId,
   p_context: OverviewLoadContext,
 ): Promise<AdapterResult<readonly ModelBenchmark[]>> {
   try {
     return await p_loader(p_context);
   } catch {
-    return f_adapterFail(`${p_source} refresh failed unexpectedly`);
+    return f_adapterFail("benchmark refresh failed unexpectedly");
   }
 }
 

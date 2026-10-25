@@ -29,19 +29,15 @@ import type { ModelBenchmark } from "../domain/model-benchmark";
 import { f_getBenchmarkForModel, type ModelRecord } from "../domain/model-record";
 import {
   f_isModelSortKey,
-  f_isRankingMode,
   f_isSortDirection,
-  k_defaultRankingMode,
   k_defaultSortDirection,
   k_defaultSortKey,
   k_modelSortKeys,
   type ModelSortKey,
-  type RankingMode,
   type SortDirection,
 } from "../domain/model-sort";
 import { f_adapterFail, type AdapterResult } from "../providers/adapter-result";
-import { f_fetchGpqaBenchmarks } from "../providers/huggingface-gpqa";
-import { f_fetchLiveCodeBench } from "../providers/livecodebench";
+import { f_fetchLlbmBenchmarks } from "../providers/llbm";
 import { f_fetchModelsDevCrosswalk, type ModelsDevCrosswalk } from "../providers/models-dev";
 import { f_parseOpencodeModels } from "../providers/opencode-models";
 import {
@@ -76,27 +72,21 @@ export const k_filtersStorageKey = "model-overview.filters";
 export interface OverviewViewPreferences {
   sortKey: ModelSortKey;
   sortDirection: SortDirection;
-  ranking: RankingMode;
   collapsed: boolean;
 }
 
 export const k_defaultViewPreferences: OverviewViewPreferences = {
   sortKey: k_defaultSortKey,
   sortDirection: k_defaultSortDirection,
-  ranking: k_defaultRankingMode,
   collapsed: false,
 };
 
 export interface OverviewFilters {
   freeOnly: boolean;
-  missingGpqa: boolean;
-  missingLiveCodeBench: boolean;
 }
 
 export const k_defaultFilters: OverviewFilters = {
   freeOnly: false,
-  missingGpqa: false,
-  missingLiveCodeBench: false,
 };
 
 /**
@@ -142,8 +132,7 @@ function fh_benchmarkText(p_benchmark: ModelBenchmark | null): string {
   if (p_benchmark.score !== null) vl_parts.push(f_formatScore(p_benchmark.score));
   if (vl_parts.length === 0) return "—";
   const vl_text = vl_parts.join(" ");
-  const vl_isProxy =
-    p_benchmark.matchType === "version_proxy" || p_benchmark.matchType === "family_proxy";
+  const vl_isProxy = p_benchmark.matchType === "family_fallback";
   return vl_isProxy ? `~${vl_text}` : vl_text;
 }
 
@@ -160,12 +149,9 @@ function fh_tableCell(p_model: ModelRecord, p_key: ModelSortKey): string {
       return f_formatPrice(p_model.pricing.inputUsdPerMillionTokens);
     case "outputPrice":
       return f_formatPrice(p_model.pricing.outputUsdPerMillionTokens);
-    case "gpqaRank":
-    case "gpqaScore":
-      return fh_benchmarkText(f_getBenchmarkForModel(p_model, "gpqa"));
-    case "livecodebenchRank":
-    case "livecodebenchScore":
-      return fh_benchmarkText(f_getBenchmarkForModel(p_model, "livecodebench"));
+    case "llbmRank":
+    case "llbmScore":
+      return fh_benchmarkText(f_getBenchmarkForModel(p_model, "llbm"));
     case "releaseDate":
       return p_model.releaseDate ?? "—";
   }
@@ -212,9 +198,7 @@ export const k_overviewUsage = "/mosp [toggle | status | update | redraw | sort 
 
 const k_sortTokenAliases: Readonly<Record<string, ModelSortKey>> = {
   ctx: "contextWindow",
-  gpqa: "gpqaRank",
-  lcb: "livecodebenchRank",
-  livecodebench: "livecodebenchRank",
+  llbm: "llbmRank",
   "input-price": "inputPrice",
   "output-price": "outputPrice",
 };
@@ -223,19 +207,12 @@ const k_sortTokenAliases: Readonly<Record<string, ModelSortKey>> = {
 export function f_getDefaultSortDirection(p_key: ModelSortKey): SortDirection {
   if (
     p_key === "releaseDate" ||
-    p_key === "gpqaScore" ||
-    p_key === "livecodebenchScore" ||
+    p_key === "llbmScore" ||
     p_key === "contextWindow"
   ) {
     return "desc";
   }
   return "asc";
-}
-
-function fh_benchmarkForSortKey(p_key: ModelSortKey): RankingMode | null {
-  if (p_key === "gpqaRank" || p_key === "gpqaScore") return "gpqa";
-  if (p_key === "livecodebenchRank" || p_key === "livecodebenchScore") return "livecodebench";
-  return null;
 }
 
 /** Selecting the active column toggles direction; a new column gets its default. */
@@ -254,14 +231,8 @@ export function f_nextSortState(
 
 /** Map controller state onto the service-layer filter options. */
 export function f_buildFilterOptions(p_filters: OverviewFilters): ModelFilterOptions {
-  const vl_presence: ModelFilterOptions["benchmarkPresence"] = p_filters.missingGpqa
-    ? { scope: "gpqa", state: "missing" }
-    : p_filters.missingLiveCodeBench
-      ? { scope: "livecodebench", state: "missing" }
-      : undefined;
   return {
     freeOnly: p_filters.freeOnly,
-    ...(vl_presence !== undefined ? { benchmarkPresence: vl_presence } : {}),
   };
 }
 
@@ -271,7 +242,7 @@ export function f_deriveOverviewRows(
   p_preferences: OverviewViewPreferences,
   p_filters: OverviewFilters,
 ): OverviewDerivedRows {
-  const vl_filtered = f_filterModels(p_models, f_buildFilterOptions(p_filters));
+  const vl_filtered = f_filterModels(p_models, { freeOnly: p_filters.freeOnly });
   return {
     rows: f_sortModels(vl_filtered, p_preferences.sortKey, p_preferences.sortDirection),
     totalCount: p_models.length,
@@ -313,12 +284,9 @@ export function f_getSortKeyLabel(p_key: ModelSortKey): string {
       return "Provider";
     case "releaseDate":
       return "Released";
-    case "gpqaRank":
-    case "gpqaScore":
-      return "GPQA";
-    case "livecodebenchRank":
-    case "livecodebenchScore":
-      return "LCB";
+    case "llbmRank":
+    case "llbmScore":
+      return "LLBM";
     case "contextWindow":
       return "Ctx";
     case "inputPrice":
@@ -346,6 +314,7 @@ function fh_shortSource(p_source: string): string {
   if (p_source === "opencode-models") return "models";
   if (p_source === "opencode-pricing") return "pricing";
   if (p_source === "models-dev") return "models.dev";
+  if (p_source === "llbm") return "llbm";
   return p_source;
 }
 
@@ -380,7 +349,7 @@ export function f_buildStatusLines(
   const vl_lines: string[] = [];
   vl_lines.push(`status: ${f_buildStatusLine(p_snapshot, p_loading, p_lastError)}`);
   vl_lines.push(
-    `sort: ${f_getSortKeyLabel(p_preferences.sortKey)} ${p_preferences.sortDirection === "asc" ? "ascending" : "descending"} · ranking: ${p_preferences.ranking === "gpqa" ? "GPQA" : "LiveCodeBench"}`,
+    `sort: ${f_getSortKeyLabel(p_preferences.sortKey)} ${p_preferences.sortDirection === "asc" ? "ascending" : "descending"}`,
   );
   vl_lines.push(`models: ${p_rows.filteredCount} of ${p_rows.totalCount} shown`);
   vl_lines.push(`filters: ${fh_describeFilters(p_filters)}`);
@@ -398,8 +367,6 @@ export function f_buildStatusLines(
 function fh_describeFilters(p_filters: OverviewFilters): string {
   const vl_active: string[] = [];
   if (p_filters.freeOnly) vl_active.push("free");
-  if (p_filters.missingGpqa) vl_active.push("missing GPQA");
-  if (p_filters.missingLiveCodeBench) vl_active.push("missing LCB");
   return vl_active.length > 0 ? vl_active.join(", ") : "none";
 }
 
@@ -407,14 +374,12 @@ function fh_describeFilters(p_filters: OverviewFilters): string {
 export function f_buildSidebarSummary(
   p_leader: ModelRecord | null,
   p_total: number,
-  p_ranking: RankingMode,
 ): string {
-  const vl_label = p_ranking === "gpqa" ? "GPQA" : "LCB";
-  if (p_leader === null) return `${p_total} models · no ${vl_label} data`;
-  const vl_benchmark = f_getBenchmarkForModel(p_leader, p_ranking);
+  if (p_leader === null) return `${p_total} models · no LLBM data`;
+  const vl_benchmark = f_getBenchmarkForModel(p_leader, "llbm");
   const vl_rank = f_formatRank(vl_benchmark?.rank ?? null);
   const vl_score = f_formatScore(vl_benchmark?.score ?? null);
-  return `${p_total} models · ${vl_label} ${vl_rank} ${f_truncate(p_leader.name, 18)} ${vl_score}`;
+  return `${p_total} models · LLBM ${vl_rank} ${f_truncate(p_leader.name, 18)} ${vl_score}`;
 }
 
 /** Short snapshot description for update toasts. */
@@ -427,7 +392,6 @@ export interface OverviewController {
   /** Controller-owned reactive state — the only source used for rendering. */
   readonly sortKey: Accessor<ModelSortKey>;
   readonly sortDirection: Accessor<SortDirection>;
-  readonly ranking: Accessor<RankingMode>;
   readonly collapsed: Accessor<boolean>;
   readonly filters: Accessor<OverviewFilters>;
   /** Plain snapshot of the current prefs (status dialogs, derivations). */
@@ -440,8 +404,6 @@ export interface OverviewController {
   /** Whether header-click collapse is enabled (env-gated, default off). */
   readonly headerCollapseEnabled: boolean;
   readonly toggleFreeOnly: () => void;
-  readonly toggleMissingGpqa: () => void;
-  readonly toggleMissingLiveCodeBench: () => void;
   readonly clearFilters: () => void;
   readonly toggleSort: (p_key: ModelSortKey) => void;
   readonly toggleCollapsed: () => void;
@@ -471,7 +433,6 @@ export function f_createOverviewController(
   // Resolve initial values once, folding legacy/partial shapes back to defaults.
   const vl_storedSortKey: unknown = vl_preferences.sortKey;
   const vl_storedSortDirection: unknown = vl_preferences.sortDirection;
-  const vl_storedRanking: unknown = vl_preferences.ranking;
   const vl_storedCollapsed: unknown = vl_preferences.collapsed;
   const vl_initialSortKey: ModelSortKey = f_isModelSortKey(vl_storedSortKey)
     ? vl_storedSortKey
@@ -479,9 +440,6 @@ export function f_createOverviewController(
   const vl_initialSortDirection: SortDirection = f_isSortDirection(vl_storedSortDirection)
     ? vl_storedSortDirection
     : k_defaultSortDirection;
-  const vl_initialRanking: RankingMode = f_isRankingMode(vl_storedRanking)
-    ? vl_storedRanking
-    : k_defaultRankingMode;
   const vl_initialCollapsed = f_resolveCollapsedState(
     vl_headerCollapseEnabled,
     typeof vl_storedCollapsed === "boolean" ? vl_storedCollapsed : false,
@@ -489,33 +447,23 @@ export function f_createOverviewController(
   if (
     !f_isModelSortKey(vl_storedSortKey) ||
     !f_isSortDirection(vl_storedSortDirection) ||
-    !f_isRankingMode(vl_storedRanking) ||
     typeof vl_storedCollapsed !== "boolean" ||
     (!vl_headerCollapseEnabled && vl_storedCollapsed === true)
   ) {
     void vl_setPreferences((draft) => {
       draft.sortKey = vl_initialSortKey;
       draft.sortDirection = vl_initialSortDirection;
-      draft.ranking = vl_initialRanking;
       draft.collapsed = vl_initialCollapsed;
     });
   }
   const vl_initialFilters: OverviewFilters = {
     freeOnly: typeof vl_filtersStore.freeOnly === "boolean" ? vl_filtersStore.freeOnly : false,
-    missingGpqa: typeof vl_filtersStore.missingGpqa === "boolean" ? vl_filtersStore.missingGpqa : false,
-    missingLiveCodeBench:
-      typeof vl_filtersStore.missingLiveCodeBench === "boolean"
-        ? vl_filtersStore.missingLiveCodeBench
-        : false,
   };
 
   // Controller-owned signals: the rendering source of truth.
-  const [vl_sortKey, vl_setSortKey] = createSignal<ModelSortKey>(vl_initialSortKey);
-  const [vl_sortDirection, vl_setSortDirection] = createSignal<SortDirection>(
-    vl_initialSortDirection,
-  );
-  const [vl_ranking] = createSignal<RankingMode>(vl_initialRanking);
-  const [vl_collapsed, vl_setCollapsed] = createSignal<boolean>(vl_initialCollapsed);
+  const [vl_sortKey, vl_setSortKey] = createSignal<ModelSortKey>("llbmRank");
+  const [vl_sortDirection, vl_setSortDirection] = createSignal<SortDirection>("asc");
+  const [vl_collapsed, vl_setCollapsed] = createSignal<boolean>(false);
   const [vl_filters, vl_setFilters] = createSignal<OverviewFilters>(vl_initialFilters);
   const [vl_snapshot, vl_setSnapshot] = createSignal<ModelOverviewSnapshot | undefined>(undefined);
   const [vl_loading, vl_setLoading] = createSignal(false);
@@ -524,7 +472,6 @@ export function f_createOverviewController(
   const fh_preferencesSnapshot = (): OverviewViewPreferences => ({
     sortKey: vl_sortKey(),
     sortDirection: vl_sortDirection(),
-    ranking: vl_ranking(),
     collapsed: vl_collapsed(),
   });
 
@@ -538,9 +485,8 @@ export function f_createOverviewController(
   });
   const vl_rankingLeader = createMemo(() => {
     const vl_models = vl_snapshot()?.models ?? [];
-    // Default to GPQA; follow the benchmark when a benchmark column is active.
-    const vl_benchmark = fh_benchmarkForSortKey(vl_sortKey()) ?? vl_ranking();
-    const vl_key: ModelSortKey = vl_benchmark === "gpqa" ? "gpqaRank" : "livecodebenchRank";
+    // Default to LLMBM rank
+    const vl_key: ModelSortKey = "llbmRank";
     return f_sortModels(vl_models, vl_key, "asc")[0] ?? null;
   });
 
@@ -581,44 +527,10 @@ export function f_createOverviewController(
     fh_pokeRender();
   }
 
-  function f_toggleMissingGpqa(): void {
-    const vl_current = vl_filters();
-    const vl_nextEnabled = !vl_current.missingGpqa;
-    const vl_next: OverviewFilters = {
-      freeOnly: vl_current.freeOnly,
-      missingGpqa: vl_nextEnabled,
-      missingLiveCodeBench: vl_nextEnabled ? false : vl_current.missingLiveCodeBench,
-    };
-    vl_setFilters(vl_next);
-    void vl_setFiltersStore((draft) => {
-      draft.missingGpqa = vl_next.missingGpqa;
-      draft.missingLiveCodeBench = vl_next.missingLiveCodeBench;
-    });
-    fh_pokeRender();
-  }
-
-  function f_toggleMissingLiveCodeBench(): void {
-    const vl_current = vl_filters();
-    const vl_nextEnabled = !vl_current.missingLiveCodeBench;
-    const vl_next: OverviewFilters = {
-      freeOnly: vl_current.freeOnly,
-      missingGpqa: vl_nextEnabled ? false : vl_current.missingGpqa,
-      missingLiveCodeBench: vl_nextEnabled,
-    };
-    vl_setFilters(vl_next);
-    void vl_setFiltersStore((draft) => {
-      draft.missingGpqa = vl_next.missingGpqa;
-      draft.missingLiveCodeBench = vl_next.missingLiveCodeBench;
-    });
-    fh_pokeRender();
-  }
-
   function f_clearFilters(): void {
-    vl_setFilters({ ...k_defaultFilters });
+    vl_setFilters({ freeOnly: false });
     void vl_setFiltersStore((draft) => {
       draft.freeOnly = false;
-      draft.missingGpqa = false;
-      draft.missingLiveCodeBench = false;
     });
     fh_pokeRender();
   }
@@ -695,19 +607,10 @@ export function f_createOverviewController(
     );
   }
 
-  async function fh_loadGpqa(
+  async function fh_loadLlbm(
     p_loadContext: OverviewLoadContext,
   ): Promise<AdapterResult<readonly ModelBenchmark[]>> {
-    return f_fetchGpqaBenchmarks({
-      timeoutMs: p_loadContext.timeoutMs,
-      ...(p_loadContext.signal !== null ? { signal: p_loadContext.signal } : {}),
-    });
-  }
-
-  async function fh_loadLiveCodeBench(
-    p_loadContext: OverviewLoadContext,
-  ): Promise<AdapterResult<readonly ModelBenchmark[]>> {
-    return f_fetchLiveCodeBench({
+    return f_fetchLlbmBenchmarks({
       timeoutMs: p_loadContext.timeoutMs,
       ...(p_loadContext.signal !== null ? { signal: p_loadContext.signal } : {}),
     });
@@ -746,8 +649,7 @@ export function f_createOverviewController(
       const vl_next = await f_refreshModelOverview({
         cache: vl_cache,
         loadModels: fh_loadModels,
-        loadGpqa: fh_loadGpqa,
-        loadLiveCodeBench: fh_loadLiveCodeBench,
+        loadLlbm: fh_loadLlbm,
         loadModelsDev: fh_loadModelsDev,
         force: p_force,
         modelTtlMs: vl_ttls.modelTtlMs,
@@ -770,7 +672,6 @@ export function f_createOverviewController(
     cache: vl_cache,
     sortKey: vl_sortKey,
     sortDirection: vl_sortDirection,
-    ranking: vl_ranking,
     collapsed: vl_collapsed,
     filters: vl_filters,
     preferences: fh_preferencesSnapshot,
@@ -781,8 +682,6 @@ export function f_createOverviewController(
     rankingLeader: vl_rankingLeader,
     headerCollapseEnabled: vl_headerCollapseEnabled,
     toggleFreeOnly: f_toggleFreeOnly,
-    toggleMissingGpqa: f_toggleMissingGpqa,
-    toggleMissingLiveCodeBench: f_toggleMissingLiveCodeBench,
     clearFilters: f_clearFilters,
     toggleSort: f_toggleSort,
     toggleCollapsed: f_toggleCollapsed,
