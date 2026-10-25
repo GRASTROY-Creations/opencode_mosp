@@ -516,6 +516,44 @@ table".
   `ui-integration.md`, `development.md`, fixtures README refreshed.
 - Re-verified: `bun run check` green — **163 tests / 555 assertions**, 0 fail.
 
+### Adjustment 21 — verified mapping rebuild + source-row sharing (owner exec, 2026-10-25)
+
+Owner asked whether `docs/KNOWLEDGE_09.md` ("proven, fully resolved", ~74/82
+PASS) could map every catalog model to a near-equivalent LLMBM entry. Live
+verification disproved the claim as written: of 79 non-null entries, 41
+identifiers existed and were scored, 27 exist in `dataset.models` but carry no
+`aa_coding_index` row, and 11 were absent — 6 of them dash-form Claude IDs with
+scored DOT variants (`claude-opus-4-8` → `anthropic/claude-opus-4.8` 74.3 …),
+5 more later shown to have real (unscored) dot forms. Nothing was fabricated.
+Owner decisions (verbatim): "Corrected table (Recommended)" +
+"Allow sharing (Recommended)".
+
+- `src/config/llbm-mappings.ts` rebuilt entry-by-entry against the live export:
+  **82 entries, 79 with a source ID** — 47 scored today, 32 PENDING (real
+  models awaiting a metric row; they attach automatically), only
+  `beam-free`/`big-pickle`/`flint-40b-free` null. 11 dash→dot corrections
+  applied; sibling proxies (`gpt-5-codex` → `openai/gpt-5`, …) kept as
+  owner-reviewed `family_fallback` entries.
+- Matcher **sharing rule** replaces Adjustment 20's exact-wins drop (superseded
+  bullet above): one source ID may attach to several reviewed targets — the
+  `exact` owner directly, `family_fallback` siblings as cloned rows rendered
+  `~#rank score`. Casefold collisions across different source strings still
+  drop only the fold; exact keys stay usable.
+- `scripts/validate-mappings.ts` now classifies PASS / PENDING / DRIFT and
+  exits non-zero only on DRIFT. Live smoke: **47 PASS, 32 PENDING, 0 DRIFT**.
+- `scripts/generate-mappings.ts` gained the dot-equivalence rule (single dash →
+  dot at a version boundary, adopted only when uniquely resolvable) and PENDING
+  adoption from `dataset.models`; live run emits 70/82 automatically — the
+  remainder are reviewed-only proxies/suffix forms the generator deliberately
+  does not guess.
+- Tests: the duplicate-source drop test became a sharing test (both targets
+  attach); the seeded-production test now expects 5 matches including the
+  `glm-5.3-flash-free` family clone with an equal score.
+  Re-verified: `bun run check` green — **163 tests / 560 assertions**, 0 fail.
+- Docs: `docs/api/llmbenchmark.md` mapping section rewritten (dot rule,
+  sharing, three-way validator); `data-flow.md` and `models-dev.md` numbers and
+  rules updated.
+
 ### Phase 7 — Testing, security, CI
 Unit suite (normalization, aliases, price units incl. no double-scaling, score→rank, sort directions/ties/missing,
 filters, TTL, malformed/timeout/HTTP errors) + integration scenarios with mocked HTTP & committed fixtures (§14.2 list)

@@ -45,9 +45,12 @@ Benchmark rows are matched independently, in this order: exact
 `<providerId>/<modelId>` key, exact `modelId`, exact `canonicalId`, reviewed
 alias, reviewed benchmark mapping (`src/config/llbm-mappings.ts`, exact
 source-ID first, then a casefolded fallback that only applies when the folded
-key resolves to a single distinct source — collisions drop both entries), then
-conservative normalization (trim, lowercase, `_` → `-` only). Provider prefixes,
-version suffixes, and punctuation are not stripped automatically.
+key resolves to a single distinct source — collisions drop the fold; exact
+matches remain usable), then conservative normalization (trim, lowercase, `_`
+→ `-` only). Provider prefixes, version suffixes, and punctuation are not
+stripped automatically. A mapping source ID may carry several reviewed
+targets (Adjustment 21 sharing): the `exact` owner attaches directly and each
+`family_fallback` sibling attaches as a clone of the same row.
 
 - A strategy that resolves to more than one model is recorded as `ambiguous`;
   matching stops there and never falls through to a looser strategy.
@@ -56,22 +59,27 @@ version suffixes, and punctuation are not stripped automatically.
   benchmark for a model are all recorded as unmatched.
 - Existing benchmark rows are never overwritten.
 - `src/config/model-aliases.ts` stays empty (no legacy alias rows).
-  `src/config/llbm-mappings.ts` was regenerated on 2026-10-25 from the live
-  LLMBM `/v1/export` scored set via `bun run generate:mappings`: **37 of 82**
-  catalog models matched (35 exact tail/casefold matches, 2 `-free`
-  `family_fallback` matches); all other entries are kept with `llbmId: null`
-  as documented unmatched. The candidate tables in KNOWLEDGE_04.md and
-  KNOWLEDGE_06.md were validated earlier against the then-live sources and
-  attached ZERO rows as written, so nothing from them was adopted. The service
-  accepts injected registries for tests and future reviewed mappings.
+  `src/config/llbm-mappings.ts` was rebuilt on 2026-10-25 (Adjustment 21)
+  entry-by-entry against the live LLMBM dataset: **79 of 82** catalog models
+  carry a source ID — 47 are scored for `aa_coding_index` today, 32 are real
+  models without a metric row yet (PENDING; they attach automatically once
+  scored), and only `beam-free`, `big-pickle`, `flint-40b-free` stay `null`.
+  Dash-form Claude IDs were corrected to their live dot forms
+  (`claude-opus-4-8` → `anthropic/claude-opus-4.8`); sibling proxies
+  (`gpt-5-codex` → `openai/gpt-5`, …) are owner-reviewed manual entries. The
+  candidate tables in KNOWLEDGE_04.md and KNOWLEDGE_06.md attached ZERO rows
+  as written, so nothing from them was adopted. The service accepts injected
+  registries for tests and future reviewed mappings.
 - Every attached row records a `matchType`: mapping entries carry their own
   kind (`exact`, `family_fallback`); legacy strategies attach as `exact`.
   `family_fallback` cells render with a `~` prefix and are never presented as
   the model's own score.
 - `bun run validate:mappings` (`scripts/validate-mappings.ts`) re-fetches the
   live LLMBM export (plus the location catalog unless `--skip-catalog`) and
-  exits non-zero when a reviewed mapping's source ID drifts. Network-required;
-  deliberately not part of `bun run check`.
+  classifies every non-null `llbmId` as **PASS** (scored), **PENDING** (real
+  model, no metric row yet — kept on purpose), or **DRIFT** (exists nowhere —
+  must be corrected or nulled). It exits non-zero only on DRIFT.
+  Network-required; deliberately not part of `bun run check`.
 
 ## Ranking and filtering
 
@@ -83,10 +91,11 @@ derives competition ranks from scores (ties share a rank, e.g. 1, 1, 3); a
 null score keeps `rank: null`, and source-supplied ranks are always recomputed
 locally (LLMBM rows carry none; the old GPQA published rank mixed subsets).
 
-`src/services/model-filter.ts` composes case-insensitive search (name,
-provider, IDs), exact provider IDs, benchmark presence/absence (one benchmark
-or any), and explicit-free pricing. Filters are AND-combined and never mutate
-the catalog.
+`src/services/model-filter.ts` composes exact provider IDs, benchmark
+presence/absence (one benchmark or any), and explicit-free pricing. Filters
+are AND-combined and never mutate the catalog. (Case-insensitive text search
+was removed end-to-end in Adjustment 11; the UI exposes only the free filter
+chip.)
 
 ## Failure isolation
 
@@ -129,4 +138,11 @@ includes query strings, headers, or credentials in errors.
   `docs/api/llmbenchmark.md`); mappings were regenerated from the live
   `/v1/export` scored set (37/82) via `bun run generate:mappings`, drift-checked
   by `bun run validate:mappings`.
+- **Adjustment 21 (done):** the mapping table was rebuilt entry-by-entry
+  against the live LLMBM dataset (79/82 with a source ID: 47 scored today,
+  32 PENDING, 3 null) with dot-form corrections for the Claude IDs, and the
+  matcher now lets one source ID attach to several reviewed targets
+  (exact owner + cloned `family_fallback` siblings). The validator classifies
+  PASS/PENDING/DRIFT; the generator gained the dot-equivalence and PENDING
+  rules. See `docs/PLAN.md` and `docs/api/llmbenchmark.md`.
 - **Phase 7 (next):** testing, security, and CI hardening.

@@ -69,35 +69,36 @@ HF GPQA + LiveCodeBench pair (Adjustment 19/20).
 The catalog uses anonymized/rebranded IDs (`opencode/beam-free`, …), so LLMBM
 rows attach through reviewed mappings keyed on the exact LLMBM `modelId`.
 
-- Generated 2026-10-25 from the live `/v1/export` scored set
-  (`bun run generate:mappings`, `scripts/generate-mappings.ts`): **37 of 82**
-  catalog models matched.
-- Matching policy (owner-approved "Auto-adopt exact + review table"):
+- Rebuilt 2026-10-25 from the live `/v1/export` scored set
+  (`bun run generate:mappings`, `scripts/generate-mappings.ts`): **79 of 82**
+  entries carry a source id — **47 attach today** (metric scored) and **32 are
+  PENDING** (the model exists in `dataset.models` but has no `aa_coding_index`
+  row yet; they attach automatically once scored). Only `beam-free`,
+  `big-pickle`, and `flint-40b-free` remain `null`.
+- Matching policy (owner-approved):
   1. tail after the last `/` of the LLMBM id equals the catalog `modelId`
      (case-folded) → `matchType: "exact"`;
-  2. catalog id ends `-free` and the stem matches a tail →
-     `matchType: "family_fallback"` (rendered `~` in the table);
-  3. everything else → `llbmId: null` (documented as unmatched; the generator
-     prints near-candidates for review).
-- Deliberate non-adoptions pending owner policy:
-  - dot-vs-dash naming: `opencode/claude-fable-5-1` ↔
-    `anthropic/claude-fable-5.1`, `claude-haiku-4-5` ↔ `claude-haiku-4.5`,
-    `claude-opus-4-7/4-8`, `claude-sonnet-4-5/4-6`;
-  - suffix drift: `gemini-3.1-pro` vs `-preview`, `qwen3.8-max` vs `-0902`,
-    `nemotron-3-ultra-free` vs `-550b-a55b`;
-  - anonymized rebrands with no candidate at all: `beam-free`, `big-pickle`,
-    `flint-40b-free`, `gpt-6-luna`/`gpt-6-sol`/`gpt-6.1-sol`,
-    `mimo-v2.6-flash-free`, `nemotron-3.5-super-vl-free`, `mistral-large-4`,
-    `qwen3.5-plus`, `qwen3.8-flash`, `grok-4.7`, `gpt-5-nano`,
-    `muse-wonder-1.0`.
-- Shared-source conflict rule: when two mappings point at the same LLBM id,
-  the `exact` mapping wins (`opencode/glm-5.3-flash` keeps
-  `z-ai/glm-5.3-flash`; the `-free` sibling stays unmatched). Two distinct
-  targets of the same kind remain ambiguous and are dropped.
-- `bun run validate:mappings` (`scripts/validate-mappings.ts`) re-checks every
-  non-null `llbmId` against the live scored set and the location catalog
-  (best-effort) and exits non-zero on drift. Network-required; not part of
-  `bun run check`.
+  2. **dot equivalence**: a dash replaced by a dot at one version boundary
+     (`claude-opus-4-8` → `anthropic/claude-opus-4.8`), resolving to exactly
+     one live id → `exact`; ambiguous dot forms are never guessed;
+  3. catalog id ends `-free` and the stem resolves by either rule →
+     `family_fallback`;
+  4. reviewed sibling proxies (e.g. `gpt-5-codex` → `openai/gpt-5`,
+     `qwen3.8-max` → `qwen/qwen3.8-max-0902`) are owner-reviewed and added
+     manually to the config, not generated.
+- **Sharing rule (Adjustment 21)**: one source id may carry several reviewed
+  targets — the `exact` owner attaches directly and `family_fallback`
+  siblings receive a clone of the same row (rendered `~#rank score`). The
+  former "exact wins, family drops" conflict rule was retired.
+- `bun run validate:mappings` (`scripts/validate-mappings.ts`) classifies
+  every non-null `llbmId` as **PASS** (scored) / **PENDING** (real model, no
+  metric row yet) / **DRIFT** (id exists nowhere → correct or null it) and
+  exits non-zero only on DRIFT. Live run 2026-10-25: 47 PASS / 32 PENDING /
+  0 DRIFT. Network-required; not part of `bun run check`.
+- History: the KNOWLEDGE_04/06 GPQA-era tables and the KNOWLEDGE_09
+  "fully resolved" table (only 41/79 claimed strings existed as written; six
+  dash-form Claude ids were corrected to their live dot-forms) were
+  validated entry-by-entry against the live dataset before adoption.
 
 ## Tests
 

@@ -249,7 +249,7 @@ describe("casefolded mapping lookup", () => {
     expect(vl_other.unmatched[0]?.reason).toBe("no-match");
   });
 
-  test("duplicate identical sources drop from both views", async () => {
+  test("distinct targets sharing one source id all attach (sharing)", async () => {
     const vl_mappings: readonly LlbmMapping[] = [
       {
         llbmId: "Dup",
@@ -259,7 +259,7 @@ describe("casefolded mapping lookup", () => {
       {
         llbmId: "Dup",
         opencodeId: "test/model-b",
-        matchType: "exact",
+        matchType: "family_fallback",
       },
     ];
 
@@ -273,8 +273,12 @@ describe("casefolded mapping lookup", () => {
       vl_mappings,
     );
 
-    expect(vl_result.matches).toHaveLength(0);
-    expect(vl_result.unmatched[0]?.reason).toBe("no-match");
+    expect(vl_result.matches).toHaveLength(2);
+    expect(vl_result.matches[0]?.modelId).toBe("test/model-a");
+    expect(vl_result.matches[0]?.matchType).toBe("exact");
+    expect(vl_result.matches[1]?.modelId).toBe("test/model-b");
+    expect(vl_result.matches[1]?.matchType).toBe("family_fallback");
+    expect(vl_result.unmatched).toHaveLength(0);
   });
 });
 
@@ -324,7 +328,7 @@ describe("seeded production mappings (defaults)", () => {
 
     const vl_result = await f_matchBenchmarkRecords(vl_models, vl_benchmarks);
 
-    expect(vl_result.matches).toHaveLength(4);
+    expect(vl_result.matches).toHaveLength(5);
     expect(
       vl_result.matches.every((p_match) => p_match.strategy === "mapping"),
     ).toBe(true);
@@ -339,8 +343,9 @@ describe("seeded production mappings (defaults)", () => {
     );
     expect(vl_kimi?.benchmarks[0]?.matchType).toBe("exact");
 
-    // The shared `z-ai/glm-5.3-flash` source id prefers the exact entry, so
-    // the paid model is scored and the `-free` sibling stays unmatched.
+    // The shared `z-ai/glm-5.3-flash` source id attaches to both reviewed
+    // targets (Adjustment 21 sharing): the paid model owns the row and the
+    // `-free` sibling receives a clone marked family_fallback (rendered ~).
     const vl_glmPaid = vl_result.models.find(
       (p_model) => p_model.id === "opencode/glm-5.3-flash",
     );
@@ -348,6 +353,9 @@ describe("seeded production mappings (defaults)", () => {
     const vl_glmFree = vl_result.models.find(
       (p_model) => p_model.id === "opencode/glm-5.3-flash-free",
     );
-    expect(vl_glmFree?.benchmarks).toHaveLength(0);
+    expect(vl_glmFree?.benchmarks[0]?.matchType).toBe("family_fallback");
+    expect(vl_glmFree?.benchmarks[0]?.score).toBe(
+      vl_glmPaid?.benchmarks[0]?.score,
+    );
   });
 });

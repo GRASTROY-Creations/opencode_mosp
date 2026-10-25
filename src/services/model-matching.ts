@@ -6,8 +6,10 @@
  * 2. exact model ID (`modelId`);
  * 3. exact canonical ID;
  * 4. reviewed aliases;
- * 5. reviewed LLMBM mappings (source id -> registry id, exact string first,
- *    family_fallback only when uniquely resolvable);
+ * 5. reviewed LLMBM mappings (source id -> registry id(s), exact string first,
+ *    casefolded only when uniquely resolvable); several reviewed entries may
+ *    share one source id — the `exact` owner attaches directly and
+ *    `family_fallback` siblings attach as clones rendered `~`;
  * 6. conservative normalized model/canonical IDs.
  *
  * A strategy that resolves to more than one model is ambiguous and recorded as
@@ -83,13 +85,14 @@ interface _MappedTarget {
 
 /**
  * Mapping lookup index: exact `sourceId` keys win; casefolded keys act as a
- * fallback only when they resolve to a single distinct source string. When two
- * entries claim the same source id, the exact mapping wins over a family
- * fallback; two same-kind targets on one id are dropped rather than guessed.
+ * fallback only when they resolve to a single distinct source string. One
+ * source id may carry several reviewed targets (Adjustment 21): the `exact`
+ * owner and `family_fallback` siblings all attach, each with its own
+ * matchType.
  */
 interface _MappingIndex {
-  readonly exact: ReadonlyMap<string, _MappedTarget>;
-  readonly folded: ReadonlyMap<string, _MappedTarget>;
+  readonly exact: ReadonlyMap<string, readonly _MappedTarget[]>;
+  readonly folded: ReadonlyMap<string, readonly _MappedTarget[]>;
 }
 
 const k_benchmarkOrder = new Map<BenchmarkId, number>(
@@ -109,12 +112,12 @@ export function f_normalizeModelId(p_modelId: string): string {
  * Build the exact + folded mapping index from reviewed LLMBM mappings.
  *
  * Exact `sourceId` keys win; casefolded keys act as a fallback only when they
- * resolve to a single distinct source string. On an exact-key conflict an
- * exact mapping beats a family fallback; same-kind conflicts drop the key.
+ * resolve to a single distinct source string. Distinct targets sharing one
+ * exact source id are all kept (Adjustment 21 sharing): the benchmark row is
+ * attached to each of them, cloning it per model with the entry's matchType.
  */
 function fh_indexMappings(p_mappings: readonly LlbmMapping[]): _MappingIndex {
-  const vl_exact = new Map<string, _MappedTarget>();
-  const vl_exactAmbiguous = new Set<string>();
+  const vl_exact = new Map<string, _MappedTarget[]>();
 
   for (const vl_mapping of p_mappings) {
     if (vl_mapping.llbmId === null) {
@@ -130,39 +133,20 @@ function fh_indexMappings(p_mappings: readonly LlbmMapping[]): _MappingIndex {
     const vl_existing = vl_exact.get(vl_mapping.llbmId);
 
     if (vl_existing === undefined) {
-      if (!vl_exactAmbiguous.has(vl_mapping.llbmId)) {
-        vl_exact.set(vl_mapping.llbmId, vl_target);
-      }
+      vl_exact.set(vl_mapping.llbmId, [vl_target]);
       continue;
     }
 
-    if (vl_existing.opencodeId === vl_target.opencodeId) {
-      // Same mapping listed twice; keep the first.
-      continue;
+    if (!vl_existing.some((p_entry) => p_entry.opencodeId === vl_target.opencodeId)) {
+      // Reviewed sibling claim on the same source id; both attach.
+      vl_existing.push(vl_target);
     }
-
-    const vl_existingIsExact = vl_existing.matchType === "exact";
-    const vl_candidateIsExact = vl_target.matchType === "exact";
-
-    if (vl_existingIsExact && !vl_candidateIsExact) {
-      // A family fallback cannot override a precise reviewed mapping.
-      continue;
-    }
-
-    if (!vl_existingIsExact && vl_candidateIsExact) {
-      vl_exact.set(vl_mapping.llbmId, vl_target);
-      continue;
-    }
-
-    // Same kind, distinct targets: ambiguous, drop the key entirely.
-    vl_exact.delete(vl_mapping.llbmId);
-    vl_exactAmbiguous.add(vl_mapping.llbmId);
   }
 
-  const vl_folded = new Map<string, _MappedTarget>();
+  const vl_folded = new Map<string, readonly _MappedTarget[]>();
   const vl_foldedAmbiguous = new Set<string>();
 
-  for (const [vl_key, vl_target] of vl_exact) {
+  for (const [vl_key, vl_targets] of vl_exact) {
     const vl_foldKey = vl_key.toLowerCase();
 
     if (vl_foldedAmbiguous.has(vl_foldKey)) {
@@ -172,8 +156,8 @@ function fh_indexMappings(p_mappings: readonly LlbmMapping[]): _MappingIndex {
     const vl_existing = vl_folded.get(vl_foldKey);
 
     if (vl_existing === undefined) {
-      vl_folded.set(vl_foldKey, vl_target);
-    } else if (vl_existing.opencodeId !== vl_target.opencodeId) {
+      vl_folded.set(vl_foldKey, vl_targets);
+    } else if (!fh_sameTargets(vl_existing, vl_targets)) {
       // Distinct exact keys that collide when casefolded make the fold
       // lookup ambiguous; exact matches remain usable.
       vl_folded.delete(vl_foldKey);
@@ -184,10 +168,22 @@ function fh_indexMappings(p_mappings: readonly LlbmMapping[]): _MappingIndex {
   return { exact: vl_exact, folded: vl_folded };
 }
 
+function fh_sameTargets(
+  p_left: readonly _MappedTarget[],
+  p_right: readonly _MappedTarget[],
+): boolean {
+  return (
+    p_left.length === p_right.length &&
+    p_left.every((p_entry) =>
+      p_right.some((p_other) => p_other.opencodeId === p_entry.opencodeId),
+    )
+  );
+}
+
 function fh_lookupMapping(
   p_index: _MappingIndex,
   p_sourceModelId: string,
-): _MappedTarget | undefined {
+): readonly _MappedTarget[] | undefined {
   const vl_exact = p_index.exact.get(p_sourceModelId);
 
   if (vl_exact !== undefined) {
@@ -355,40 +351,51 @@ export function f_matchBenchmarkRecords(
       continue;
     }
 
-    // 5. reviewed LLMBM mappings
-    const vl_mapping = fh_lookupMapping(
+    // 5. reviewed LLMBM mappings (one source id may serve several targets)
+    const vl_mappingTargets = fh_lookupMapping(
       vl_mappingIndex,
       vl_smid,
     );
-    if (vl_mapping !== undefined) {
-      const vl_targets: ModelRecord[] = [];
-      const vl_targetById = vl_index.byId.get(vl_mapping.opencodeId);
-      if (vl_targetById !== undefined && vl_targetById.length > 0) {
-        for (const vl_target of vl_targetById) {
-          if (!vl_targets.some((p) => p.id === vl_target.id)) {
-            vl_targets.push(vl_target);
-          }
+    if (vl_mappingTargets !== undefined) {
+      let vl_attachedCount = 0;
+
+      for (const vl_mapping of vl_mappingTargets) {
+        const vl_targetList = vl_index.byId.get(vl_mapping.opencodeId);
+        const vl_target =
+          vl_targetList !== undefined && vl_targetList.length > 0
+            ? vl_targetList[0]!
+            : undefined;
+
+        if (vl_target === undefined) {
+          continue;
         }
+
+        const vl_attached = {
+          ...vl_benchmark,
+          matchType: vl_mapping.matchType as BenchmarkMatchType,
+        };
+        fh_addBenchmarkToModel(
+          vl_benchmarksByModel,
+          vl_changedModels,
+          vl_target.id,
+          vl_attached,
+        );
+        vl_matches.push({
+          benchmark: vl_attached,
+          modelId: vl_target.id,
+          strategy: "mapping",
+          matchType: vl_mapping.matchType,
+        });
+        vl_attachedCount += 1;
       }
 
-      if (vl_targets.length === 0) {
+      if (vl_attachedCount === 0) {
         vl_unmatched.push({
           benchmarkId: vl_benchmark.benchmarkId,
           sourceModelId: vl_smid,
           reason: "mapping-target-missing",
         });
-        continue;
       }
-
-      const vl_target = vl_targets[0]!;
-      const vl_attached = { ...vl_benchmark, matchType: vl_mapping.matchType as BenchmarkMatchType };
-      fh_addBenchmarkToModel(vl_benchmarksByModel, vl_changedModels, vl_target.id, vl_attached);
-      vl_matches.push({
-        benchmark: vl_attached,
-        modelId: vl_target.id,
-        strategy: "mapping",
-        matchType: vl_mapping.matchType,
-      });
       continue;
     }
 
