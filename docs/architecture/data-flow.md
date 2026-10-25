@@ -8,7 +8,8 @@ live fetches happen solely through explicit refreshes.
 ```text
 OpenCode registry ─┐
 HF GPQA leaderboard ├─► source adapter ─► domain records ─► matching ─► ranking ─► aggregation/cache ─► UI
-LiveCodeBench JSON ─┘
+LiveCodeBench JSON ─┤
+models.dev api.json ┘
 ```
 
 | Source | Adapter | Output |
@@ -16,6 +17,7 @@ LiveCodeBench JSON ─┘
 | Local model registry (`context.model.list()` / `context.data.location.model.list()`) | `src/providers/opencode-models.ts` (+ `opencode-pricing.ts`) | `ModelRecord[]` with `source: "opencode"`, no benchmarks |
 | HF GPQA Diamond | `src/providers/huggingface-gpqa.ts` | `ModelBenchmark[]` (`gpqa`, `gpqa_diamond`) |
 | LiveCodeBench generation snapshot | `src/providers/livecodebench.ts` | `ModelBenchmark[]` (`livecodebench`, `generation`) |
+| models.dev provider catalog (`opencode` provider) | `src/providers/models-dev.ts` | `ModelsDevCrosswalk` — cached bridge for future mappings; **not displayed** (registry stays authoritative) |
 
 `src/utils/fetch-json.ts` owns the network policy: AbortController timeout,
 bounded retries, exponential backoff, `Retry-After`, and host-only error
@@ -111,4 +113,8 @@ includes query strings, headers, or credentials in errors.
   (`src/ui/panel-controller.ts` + `src/tui.tsx`), wired to
   `f_getModelOverview` for cache-only reads and `f_refreshModelOverview` for
   explicit refreshes. See `docs/architecture/ui-integration.md`.
+- **Adjustment 16 (done):** the fifth source `models-dev` caches the trimmed
+  models.dev crosswalk (name/family/release date per opencode model) for the
+  future mapping stage; displayed data still comes exclusively from the
+  OpenCode registry. See `docs/api/models-dev.md`.
 - **Phase 7 (next):** testing, security, and CI hardening.

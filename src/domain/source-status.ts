@@ -12,7 +12,8 @@ export type SourceId =
   | "opencode-models"
   | "opencode-pricing"
   | "gpqa"
-  | "livecodebench";
+  | "livecodebench"
+  | "models-dev";
 
 /** Runtime registry used by refresh/status code. */
 export const k_sourceIds: readonly SourceId[] = [
@@ -20,6 +21,7 @@ export const k_sourceIds: readonly SourceId[] = [
   "opencode-pricing",
   "gpqa",
   "livecodebench",
+  "models-dev",
 ];
 
 /**

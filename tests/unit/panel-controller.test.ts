@@ -64,6 +64,7 @@ function f_createSnapshot(
         vl_source("opencode-pricing"),
         vl_source("gpqa"),
         vl_source("livecodebench"),
+        vl_source("models-dev"),
       ],
     },
     matches: [],

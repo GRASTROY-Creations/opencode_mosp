@@ -40,6 +40,7 @@ import {
 import type { AdapterResult } from "../providers/adapter-result";
 import { f_fetchGpqaBenchmarks } from "../providers/huggingface-gpqa";
 import { f_fetchLiveCodeBench } from "../providers/livecodebench";
+import { f_fetchModelsDevCrosswalk, type ModelsDevCrosswalk } from "../providers/models-dev";
 import { f_parseOpencodeModels } from "../providers/opencode-models";
 import {
   f_createFileCache,
@@ -342,6 +343,7 @@ export function f_formatChipLabel(
 function fh_shortSource(p_source: string): string {
   if (p_source === "opencode-models") return "models";
   if (p_source === "opencode-pricing") return "pricing";
+  if (p_source === "models-dev") return "models.dev";
   return p_source;
 }
 
@@ -682,6 +684,15 @@ export function f_createOverviewController(
     });
   }
 
+  async function fh_loadModelsDev(
+    p_loadContext: OverviewLoadContext,
+  ): Promise<AdapterResult<ModelsDevCrosswalk>> {
+    return f_fetchModelsDevCrosswalk({
+      timeoutMs: p_loadContext.timeoutMs,
+      ...(p_loadContext.signal !== null ? { signal: p_loadContext.signal } : {}),
+    });
+  }
+
   async function f_loadFromCache(): Promise<void> {
     try {
       vl_setSnapshot(await f_getModelOverview({ cache: vl_cache }));
@@ -703,6 +714,7 @@ export function f_createOverviewController(
         loadModels: fh_loadModels,
         loadGpqa: fh_loadGpqa,
         loadLiveCodeBench: fh_loadLiveCodeBench,
+        loadModelsDev: fh_loadModelsDev,
         force: p_force,
         modelTtlMs: vl_ttls.modelTtlMs,
         benchmarkTtlMs: vl_ttls.benchmarkTtlMs,

@@ -4,6 +4,7 @@ import type { ModelBenchmark } from "../../src/domain/model-benchmark";
 import type { ModelPricingTier } from "../../src/domain/model-pricing";
 import type { ModelRecord } from "../../src/domain/model-record";
 import type { SourceId } from "../../src/domain/source-status";
+import type { ModelsDevCrosswalk } from "../../src/providers/models-dev";
 import {
   f_adapterFail,
   f_adapterOk,
@@ -62,6 +63,12 @@ function fh_createLiveCodeBenchRows(): readonly ModelBenchmark[] {
   ];
 }
 
+function fh_createCrosswalk(): ModelsDevCrosswalk {
+  return {
+    "test/alpha": { name: "Alpha", family: null, releaseDate: null },
+  };
+}
+
 async function fh_writeCache(
   p_cache: OverviewCache,
   p_source: SourceId,
@@ -89,6 +96,7 @@ async function fh_seedReadyCache(p_cache: OverviewCache): Promise<void> {
     "livecodebench",
     fh_createLiveCodeBenchRows(),
   );
+  await fh_writeCache(p_cache, "models-dev", fh_createCrosswalk());
 }
 
 describe("f_getModelOverview", () => {
@@ -111,6 +119,7 @@ describe("f_getModelOverview", () => {
       "opencode-pricing",
       "gpqa",
       "livecodebench",
+      "models-dev",
     ]);
     expect(
       vl_snapshot.status.sources.every(
@@ -258,6 +267,7 @@ describe("f_refreshModelOverview", () => {
         vl_liveCodeBenchCalls += 1;
         return Promise.resolve(f_adapterOk(vl_liveCodeBench));
       },
+      loadModelsDev: () => Promise.resolve(f_adapterOk(fh_createCrosswalk())),
     });
 
     expect(vl_modelCalls).toBe(1);
@@ -272,6 +282,7 @@ describe("f_refreshModelOverview", () => {
       "opencode-models",
       "gpqa",
       "livecodebench",
+      "models-dev",
     ] as const) {
       const vl_cached = await vl_cache.read(vl_source, k_now);
       expect(vl_cached.ok).toBe(true);
@@ -303,6 +314,7 @@ describe("f_refreshModelOverview", () => {
         ),
       loadLiveCodeBench: () =>
         Promise.resolve(f_adapterOk(fh_createLiveCodeBenchRows())),
+      loadModelsDev: () => Promise.resolve(f_adapterOk(fh_createCrosswalk())),
     });
 
     const vl_gpqa = vl_snapshot.status.sources.find(
@@ -337,6 +349,7 @@ describe("f_refreshModelOverview", () => {
             "livecodebench is down",
           ),
         ),
+      loadModelsDev: () => Promise.resolve(f_adapterOk(fh_createCrosswalk())),
     });
 
     const vl_liveCodeBench = vl_snapshot.status.sources.find(
@@ -389,6 +402,7 @@ describe("f_refreshModelOverview", () => {
           f_adapterOk(fh_createLiveCodeBenchRows()),
         );
       },
+      loadModelsDev: () => Promise.resolve(f_adapterOk(fh_createCrosswalk())),
     });
 
     const vl_models = vl_snapshot.status.sources.find(
@@ -422,6 +436,7 @@ describe("f_refreshModelOverview", () => {
       loadGpqa: () => Promise.resolve(f_adapterOk(fh_createGpqaRows())),
       loadLiveCodeBench: () =>
         Promise.resolve(f_adapterOk(fh_createLiveCodeBenchRows())),
+      loadModelsDev: () => Promise.resolve(f_adapterOk(fh_createCrosswalk())),
     });
 
     expect(vl_snapshot.models).toEqual([]);
@@ -444,6 +459,7 @@ describe("f_refreshModelOverview", () => {
       loadGpqa: () => Promise.resolve(f_adapterOk(fh_createGpqaRows())),
       loadLiveCodeBench: () =>
         Promise.resolve(f_adapterOk(fh_createLiveCodeBenchRows())),
+      loadModelsDev: () => Promise.resolve(f_adapterOk(fh_createCrosswalk())),
     });
     const vl_models = vl_snapshot.status.sources.find(
       (p_source) => p_source.source === "opencode-models",
@@ -475,6 +491,10 @@ describe("f_refreshModelOverview", () => {
       loadLiveCodeBench: () => {
         vl_calls += 1;
         return Promise.reject(new Error("lcb should not run"));
+      },
+      loadModelsDev: () => {
+        vl_calls += 1;
+        return Promise.reject(new Error("models.dev should not run"));
       },
     });
 
@@ -508,9 +528,13 @@ describe("f_refreshModelOverview", () => {
           f_adapterOk(fh_createLiveCodeBenchRows()),
         );
       },
+      loadModelsDev: () => {
+        vl_calls += 1;
+        return Promise.resolve(f_adapterOk(fh_createCrosswalk()));
+      },
     });
 
-    expect(vl_calls).toBe(3);
+    expect(vl_calls).toBe(4);
     expect(vl_snapshot.status.state).toBe("ready");
   });
 
@@ -519,6 +543,7 @@ describe("f_refreshModelOverview", () => {
     let vl_modelCalls = 0;
     let vl_gpqaCalls = 0;
     let vl_liveCodeBenchCalls = 0;
+    let vl_modelsDevCalls = 0;
 
     const vl_options = {
       cache: vl_cache,
@@ -537,6 +562,10 @@ describe("f_refreshModelOverview", () => {
           f_adapterOk(fh_createLiveCodeBenchRows()),
         );
       },
+      loadModelsDev: () => {
+        vl_modelsDevCalls += 1;
+        return Promise.resolve(f_adapterOk(fh_createCrosswalk()));
+      },
     };
 
     const vl_first = f_refreshModelOverview(vl_options);
@@ -549,6 +578,7 @@ describe("f_refreshModelOverview", () => {
     expect(vl_modelCalls).toBe(1);
     expect(vl_gpqaCalls).toBe(1);
     expect(vl_liveCodeBenchCalls).toBe(1);
+    expect(vl_modelsDevCalls).toBe(1);
   });
 
   test("keeps data and reports a warning when the cache write fails", async () => {
@@ -568,6 +598,7 @@ describe("f_refreshModelOverview", () => {
       loadGpqa: () => Promise.resolve(f_adapterOk(fh_createGpqaRows())),
       loadLiveCodeBench: () =>
         Promise.resolve(f_adapterOk(fh_createLiveCodeBenchRows())),
+      loadModelsDev: () => Promise.resolve(f_adapterOk(fh_createCrosswalk())),
     });
 
     expect(vl_snapshot.models).toHaveLength(2);
@@ -576,7 +607,35 @@ describe("f_refreshModelOverview", () => {
       vl_snapshot.warnings.filter(
         (p_warning) => p_warning.code === "cache-write",
       ),
-    ).toHaveLength(3);
+    ).toHaveLength(4);
+  });
+
+  test("keeps every other source when models.dev fails", async () => {
+    const vl_cache = f_createMemoryCache();
+
+    const vl_snapshot = await f_refreshModelOverview({
+      cache: vl_cache,
+      now: f_now,
+      loadModels: () =>
+        Promise.resolve(f_adapterOk(fh_createReadyModels())),
+      loadGpqa: () => Promise.resolve(f_adapterOk(fh_createGpqaRows())),
+      loadLiveCodeBench: () =>
+        Promise.resolve(f_adapterOk(fh_createLiveCodeBenchRows())),
+      loadModelsDev: () =>
+        Promise.resolve(
+          f_adapterFail<ModelsDevCrosswalk>("models.dev is down"),
+        ),
+    });
+
+    const vl_modelsDev = vl_snapshot.status.sources.find(
+      (p_source) => p_source.source === "models-dev",
+    );
+
+    expect(vl_modelsDev?.state).toBe("error");
+    expect(vl_modelsDev?.error).toBe("models.dev is down");
+    expect(vl_snapshot.status.state).toBe("partial");
+    expect(vl_snapshot.models).toHaveLength(2);
+    expect(vl_snapshot.matches).toHaveLength(2);
   });
 
   test("sanitizes loader exceptions", async () => {
@@ -590,6 +649,7 @@ describe("f_refreshModelOverview", () => {
       loadGpqa: () => Promise.resolve(f_adapterOk(fh_createGpqaRows())),
       loadLiveCodeBench: () =>
         Promise.resolve(f_adapterOk(fh_createLiveCodeBenchRows())),
+      loadModelsDev: () => Promise.resolve(f_adapterOk(fh_createCrosswalk())),
     });
 
     const vl_models = vl_snapshot.status.sources.find(
@@ -714,6 +774,7 @@ describe("f_getOverviewStatus", () => {
       fh_createLiveCodeBenchRows(),
       vl_liveCodeBenchTime,
     );
+    await fh_writeCache(vl_cache, "models-dev", fh_createCrosswalk());
 
     const vl_status = await f_getOverviewStatus({
       cache: vl_cache,
@@ -729,6 +790,7 @@ describe("f_getOverviewStatus", () => {
       "opencode-pricing",
       "gpqa",
       "livecodebench",
+      "models-dev",
     ]);
   });
 });

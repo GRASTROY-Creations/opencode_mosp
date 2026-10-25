@@ -377,6 +377,29 @@ Gate throughout: `bun run check` — final state 156 tests / 522 assertions,
 0 fail. Upstream bug report drafted for the owner to file (opencode 2.1.4 /
 OpenTUI 0.6.8 slot-tree painting).
 
+### Adjustment 16 — models.dev crosswalk source (owner directive, 2026-10-25)
+
+- Directive (verbatim): "all model ids, costs and context can and should be
+  gathered from https://models.dev/ in future"; precedence: "name, cost,
+  context allwas from OpenCode registry; model-ids can be used from models.dev
+  for mapping properly to huggingface-gpqa and livecodebench".
+- New fifth source `models-dev` (`src/providers/models-dev.ts`): fetches
+  `https://models.dev/api.json` (verified 2026-10-25 — top-level provider IDs,
+  `opencode` provider with 130 models incl. all 16 enabled IDs), extracts ONLY
+  the `{ name, family, release_date }` crosswalk keyed `opencode/<modelId>`,
+  cached 6 h (benchmark TTL), refreshed via `/mosp update` only, own status
+  row, full failure isolation. Registry remains authoritative for displayed
+  name/cost/context — the crosswalk is not shown yet.
+- Mappings deferred ("Defer mappings"): `k_benchmarkMappings` stays `[]`.
+  KNOWLEDGE_06 checked — openai IDs exist in models.dev, anthropic/deepseek/
+  google ID strings drift, `qwen`/`meta-llama` provider guesses invalid
+  (only `meta`). See `docs/api/models-dev.md`.
+- Tests: +7 (models-dev adapter suite + models.dev failure-isolation case);
+  gate `bun run check` green — **163 tests / 555 assertions**, 12 files.
+  Docs: new `docs/api/models-dev.md`; caching.md, data-flow.md, fixtures
+  README updated. Owner visual: status dialog shows a `models.dev` line after
+  `/mosp update`.
+
 ### Phase 7 — Testing, security, CI
 Unit suite (normalization, aliases, price units incl. no double-scaling, score→rank, sort directions/ties/missing,
 filters, TTL, malformed/timeout/HTTP errors) + integration scenarios with mocked HTTP & committed fixtures (§14.2 list)

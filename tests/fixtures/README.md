@@ -9,6 +9,7 @@ guessed ones.
 | `model-info.sample.json` | `GET /api/model` on the local OpenCode service (v2.1.4) | 2026-10-24 |
 | `hf-gpqa-leaderboard.sample.json` | `GET https://huggingface.co/api/datasets/Idavidrein/gpqa/leaderboard` | 2026-10-24 |
 | `livecodebench.sample.json` | `GET https://livecodebench.github.io/performances_generation.json` | 2026-10-24 |
+| `models-dev.sample.json` | `GET https://models.dev/api.json` (opencode provider slice + one openai model as filtering proof) | 2026-10-25 |
 
 ## Sanitization
 

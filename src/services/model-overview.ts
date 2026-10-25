@@ -31,6 +31,7 @@ import {
 } from "../domain/model-record";
 import {
   f_fail,
+  f_isRecord,
   f_ok,
   type DomainResult,
 } from "../domain/guards";
@@ -46,6 +47,11 @@ import {
   type AdapterResult,
   type AdapterWarning,
 } from "../providers/adapter-result";
+import {
+  f_parseModelsDevMeta,
+  type ModelsDevCrosswalk,
+  type ModelsDevModelMeta,
+} from "../providers/models-dev";
 import {
   f_resolveCacheTtls,
   type OverviewCache,
@@ -81,6 +87,11 @@ export type OverviewBenchmarkLoader = (
   p_context: OverviewLoadContext,
 ) => Promise<AdapterResult<readonly ModelBenchmark[]>>;
 
+/** Loads the models.dev crosswalk (registry id -> canonical metadata). */
+export type OverviewModelsDevLoader = (
+  p_context: OverviewLoadContext,
+) => Promise<AdapterResult<ModelsDevCrosswalk>>;
+
 /** Options shared by cache-only reads and status queries. */
 export interface OverviewReadOptions {
   readonly cache: OverviewCache;
@@ -93,6 +104,7 @@ export interface OverviewRefreshOptions extends OverviewReadOptions {
   readonly loadModels: OverviewModelLoader;
   readonly loadGpqa: OverviewBenchmarkLoader;
   readonly loadLiveCodeBench: OverviewBenchmarkLoader;
+  readonly loadModelsDev: OverviewModelsDevLoader;
   /** Ignore TTLs and fetch every source again. */
   readonly force?: boolean;
   /** Override the model/pricing TTL for entries written by this refresh. */
@@ -149,15 +161,14 @@ export async function f_getModelOverview(
   p_options: OverviewReadOptions,
 ): Promise<ModelOverviewSnapshot> {
   const vl_now = fh_resolveNow(p_options.now);
-  const [vl_models, vl_gpqa, vl_liveCodeBench] = await fh_readAllSources(
-    p_options.cache,
-    vl_now,
-  );
+  const [vl_models, vl_gpqa, vl_liveCodeBench, vl_modelsDev] =
+    await fh_readAllSources(p_options.cache, vl_now);
 
   return fh_assembleSnapshot(
     vl_models,
     vl_gpqa,
     vl_liveCodeBench,
+    vl_modelsDev,
     p_options.cache.key,
     [],
   );
@@ -197,10 +208,8 @@ export async function f_getOverviewStatus(
   p_options: OverviewReadOptions,
 ): Promise<ModelOverviewStatus> {
   const vl_now = fh_resolveNow(p_options.now);
-  const [vl_models, vl_gpqa, vl_liveCodeBench] = await fh_readAllSources(
-    p_options.cache,
-    vl_now,
-  );
+  const [vl_models, vl_gpqa, vl_liveCodeBench, vl_modelsDev] =
+    await fh_readAllSources(p_options.cache, vl_now);
   const vl_merged = f_mergeModelSources([
     vl_models.value === null ? [] : vl_models.value,
   ]);
@@ -210,6 +219,7 @@ export async function f_getOverviewStatus(
     vl_models,
     vl_gpqa,
     vl_liveCodeBench,
+    vl_modelsDev,
     vl_merged,
   );
 }
@@ -292,10 +302,8 @@ async function fh_performRefresh(
   const vl_force = p_options.force === true;
   const vl_warnings: OverviewWarning[] = [];
 
-  let [vl_models, vl_gpqa, vl_liveCodeBench] = await fh_readAllSources(
-    p_options.cache,
-    vl_now,
-  );
+  let [vl_models, vl_gpqa, vl_liveCodeBench, vl_modelsDev] =
+    await fh_readAllSources(p_options.cache, vl_now);
 
   const vl_jobs: RefreshJob[] = [];
 
@@ -452,12 +460,63 @@ async function fh_performRefresh(
     });
   }
 
+  if (fh_shouldRefreshModelsDev(vl_modelsDev, vl_force)) {
+    vl_jobs.push({
+      source: "models-dev",
+      run: async (): Promise<void> => {
+        fh_recordAttempt(p_options.cache.key, "models-dev", vl_nowIso);
+        const vl_result = await fh_runModelsDevLoader(
+          p_options.loadModelsDev,
+          vl_context,
+        );
+
+        vl_warnings.push(...fh_mapWarnings("models-dev", vl_result.warnings));
+
+        if (!vl_result.ok) {
+          vl_modelsDev = fh_applyFailure(
+            vl_modelsDev,
+            vl_result.error,
+            vl_nowIso,
+          );
+          return;
+        }
+
+        if (Object.keys(vl_result.value).length === 0) {
+          vl_modelsDev = fh_applyFailure(
+            vl_modelsDev,
+            "models.dev returned no models",
+            vl_nowIso,
+          );
+          return;
+        }
+
+        vl_modelsDev = fh_applySuccess(vl_result.value, vl_nowIso);
+
+        const vl_write = await p_options.cache.write(
+          "models-dev",
+          vl_result.value,
+          vl_now,
+          vl_benchmarkTtlMs,
+        );
+
+        if (!vl_write.ok) {
+          vl_warnings.push({
+            source: "models-dev",
+            code: "cache-write",
+            message: vl_write.error,
+          });
+        }
+      },
+    });
+  }
+
   await Promise.all(vl_jobs.map((p_job) => p_job.run()));
 
   return fh_assembleSnapshot(
     vl_models,
     vl_gpqa,
     vl_liveCodeBench,
+    vl_modelsDev,
     p_options.cache.key,
     vl_warnings,
   );
@@ -467,6 +526,7 @@ function fh_assembleSnapshot(
   p_models: SourceRead<readonly ModelRecord[]>,
   p_gpqa: SourceRead<readonly ModelBenchmark[]>,
   p_liveCodeBench: SourceRead<readonly ModelBenchmark[]>,
+  p_modelsDev: SourceRead<ModelsDevCrosswalk>,
   p_cacheKey: string,
   p_warnings: readonly OverviewWarning[],
 ): ModelOverviewSnapshot {
@@ -486,6 +546,7 @@ function fh_assembleSnapshot(
       p_models,
       p_gpqa,
       p_liveCodeBench,
+      p_modelsDev,
       vl_ranked,
     ),
     matches: vl_match.matches,
@@ -499,6 +560,7 @@ function fh_buildStatus(
   p_models: SourceRead<readonly ModelRecord[]>,
   p_gpqa: SourceRead<readonly ModelBenchmark[]>,
   p_liveCodeBench: SourceRead<readonly ModelBenchmark[]>,
+  p_modelsDev: SourceRead<ModelsDevCrosswalk>,
   p_rankedModels: readonly ModelRecord[],
 ): ModelOverviewStatus {
   const vl_sources: readonly SourceStatus[] = [
@@ -506,6 +568,7 @@ function fh_buildStatus(
     fh_createPricingStatus(p_models, p_rankedModels, p_cacheKey),
     fh_createStatus("gpqa", p_gpqa, p_cacheKey),
     fh_createStatus("livecodebench", p_liveCodeBench, p_cacheKey),
+    fh_createStatus("models-dev", p_modelsDev, p_cacheKey),
   ];
 
   return {
@@ -514,6 +577,7 @@ function fh_buildStatus(
       p_models.fetchedAt,
       p_gpqa.fetchedAt,
       p_liveCodeBench.fetchedAt,
+      p_modelsDev.fetchedAt,
     ]),
     sources: vl_sources,
   };
@@ -620,12 +684,14 @@ async function fh_readAllSources(
     SourceRead<readonly ModelRecord[]>,
     SourceRead<readonly ModelBenchmark[]>,
     SourceRead<readonly ModelBenchmark[]>,
+    SourceRead<ModelsDevCrosswalk>,
   ]
 > {
   return Promise.all([
     fh_readModels(p_cache, p_now),
     fh_readBenchmarks(p_cache, "gpqa", p_now),
     fh_readBenchmarks(p_cache, "livecodebench", p_now),
+    fh_readModelsDev(p_cache, p_now),
   ]);
 }
 
@@ -643,6 +709,32 @@ async function fh_readModels(
 
   if (!vl_parsed.ok) {
     return fh_invalidPayload(vl_read.value.envelope.fetchedAt, "cached model data is invalid");
+  }
+
+  return fh_successfulRead(
+    vl_parsed.value,
+    vl_read.value.envelope.fetchedAt,
+    vl_read.value.fresh,
+  );
+}
+
+async function fh_readModelsDev(
+  p_cache: OverviewCache,
+  p_now: Date,
+): Promise<SourceRead<ModelsDevCrosswalk>> {
+  const vl_read = await p_cache.read("models-dev", p_now);
+
+  if (!vl_read.ok) {
+    return fh_failedRead(vl_read.reason);
+  }
+
+  const vl_parsed = fh_parseCachedModelsDev(vl_read.value.envelope.payload);
+
+  if (!vl_parsed.ok) {
+    return fh_invalidPayload(
+      vl_read.value.envelope.fetchedAt,
+      "cached models.dev crosswalk is invalid",
+    );
   }
 
   return fh_successfulRead(
@@ -713,6 +805,38 @@ function fh_parseCachedModels(
   }
 
   return f_ok(vl_models);
+}
+
+function fh_parseCachedModelsDev(
+  p_payload: unknown,
+): DomainResult<ModelsDevCrosswalk> {
+  if (!f_isRecord(p_payload)) {
+    return f_fail("cached models.dev crosswalk must be an object");
+  }
+
+  const vl_entries: Record<string, ModelsDevModelMeta> = {};
+  let vl_count = 0;
+
+  for (const [vl_key, vl_value] of Object.entries(p_payload)) {
+    if (vl_key.length === 0) {
+      return f_fail("cached models.dev entry key must not be empty");
+    }
+
+    const vl_meta = f_parseModelsDevMeta(vl_value);
+
+    if (!vl_meta.ok) {
+      return f_fail(`cached models.dev entry ${vl_key}: ${vl_meta.error}`);
+    }
+
+    vl_entries[vl_key] = vl_meta.value;
+    vl_count += 1;
+  }
+
+  if (vl_count === 0) {
+    return f_fail("cached models.dev crosswalk is empty");
+  }
+
+  return f_ok(vl_entries);
 }
 
 function fh_parseCachedBenchmarks(
@@ -838,6 +962,18 @@ function fh_shouldRefresh<T>(
   );
 }
 
+function fh_shouldRefreshModelsDev(
+  p_read: SourceRead<ModelsDevCrosswalk>,
+  p_force: boolean,
+): boolean {
+  return (
+    p_force ||
+    p_read.state !== "fresh" ||
+    p_read.value === null ||
+    Object.keys(p_read.value).length === 0
+  );
+}
+
 async function fh_runModelLoader(
   p_loader: OverviewModelLoader,
   p_context: OverviewLoadContext,
@@ -846,6 +982,17 @@ async function fh_runModelLoader(
     return await p_loader(p_context);
   } catch {
     return f_adapterFail("model refresh failed unexpectedly");
+  }
+}
+
+async function fh_runModelsDevLoader(
+  p_loader: OverviewModelsDevLoader,
+  p_context: OverviewLoadContext,
+): Promise<AdapterResult<ModelsDevCrosswalk>> {
+  try {
+    return await p_loader(p_context);
+  } catch {
+    return f_adapterFail("models.dev refresh failed unexpectedly");
   }
 }
 

@@ -26,12 +26,18 @@ the reference for what is stored, where it lives, and how staleness is handled.
 | `opencode-models` | `ModelRecord[]` from the registry adapter | model refresh | 1 hour |
 | `gpqa` | `ModelBenchmark[]` (GPQA Diamond) | GPQA refresh | 6 hours |
 | `livecodebench` | `ModelBenchmark[]` (generation window) | LiveCodeBench refresh | 6 hours |
+| `models-dev` | `ModelsDevCrosswalk` (`opencode/<modelId>` → name/family/release date) | models.dev refresh | 6 hours |
 
-`opencode-pricing` is a **derived status view**, not a fourth cache entry: the
+`opencode-pricing` is a **derived status view**, not a cache entry: the
 registry payload carries model prices together with the catalog, so pricing is
 refreshed and cached as part of `opencode-models`. Its status mirrors the model
 source when at least one published price exists, and becomes `unavailable`
 otherwise.
+
+`models-dev` stores a **trimmed crosswalk only** (name/family/release date per
+opencode model). Registry data stays authoritative for displayed
+name/cost/context; the crosswalk is the future benchmark-mapping bridge and is
+not part of the snapshot's model rows.
 
 ## Envelope
 
@@ -73,7 +79,7 @@ invalidates old entries cleanly.
 | Variable | Meaning | Default |
 |---|---|---|
 | `OPENCODE_MODEL_CACHE_TTL_SECONDS` | Model/pricing freshness window | 3600 |
-| `OPENCODE_BENCHMARK_CACHE_TTL_SECONDS` | Benchmark freshness window | 21600 |
+| `OPENCODE_BENCHMARK_CACHE_TTL_SECONDS` | Benchmark freshness window (also governs the models.dev crosswalk) | 21600 |
 | `OPENCODE_REQUEST_TIMEOUT_MS` | Per-refresh request budget | 10000 |
 
 Values are read at refresh time (not module load), so GUI processes see their
@@ -85,7 +91,8 @@ environment for tests and tooling.
 
 `f_refreshModelOverview(options)`:
 
-1. Read all three sources from cache.
+1. Read all four cache-backed sources (models, gpqa, livecodebench,
+   models-dev).
 2. For each source, decide `fh_shouldRefresh` — forced, not fresh, empty, or
    missing.
 3. Run the selected source jobs in parallel through injected loaders.
