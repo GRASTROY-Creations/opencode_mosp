@@ -5,7 +5,7 @@ available to your OpenCode installation: provider, context window, input/output
 price (USD per 1M tokens), and two LLMBenchmark.ai scores — the Artificial
 Analysis **coding index** and **intelligence index**.
 
-- Version 0.1.18 · MIT · Grastroy Creations, Korcakov Roman
+- Version 0.1.18 · MIT · GRASTROY Creations, Korcakov Roman
 - Target: OpenCode 2.1.4 (`@opencode/plugin` 2.1.4), Bun 1.4.x
 - Documentation: [`.docs/README.md`](.docs/README.md) (goals, guide, decisions, tests, examples)
 - Data licensing for the benchmark scores is unverified — see

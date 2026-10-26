@@ -1,6 +1,6 @@
 # opencode_model_overview — Knowledge Base
 
-Company: Grastroy Creations · Author: Grastroy Creations, Korcakov Roman · License: MIT
+Company: GRASTROY Creations · Author: GRASTROY Creations, Korcakov Roman · License: MIT
 (see [decisions/D-0028](decisions/D-0028-license.md)).
 
 This directory is the **only** project documentation root (decision

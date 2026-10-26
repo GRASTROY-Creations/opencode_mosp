@@ -5,7 +5,7 @@ use. Checked 2026-10-26.
 
 ## This project
 
-MIT, © Grastroy Creations, Korcakov Roman — owner-approved exception to the
+MIT, © GRASTROY Creations, Korcakov Roman — owner-approved exception to the
 closed-source default ([D-0028](../decisions/D-0028-license.md)).
 
 ## Dependencies

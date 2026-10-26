@@ -13,4 +13,4 @@ Rules, standards and workflow for working on this project.
 | [architecture/](architecture/README.md) | MVC mapping, data flow, caching, UI integration |
 | [sources/](sources/README.md) | External data-source references (OpenCode registry, pricing, LLMBM, models.dev) |
 
-Company: Grastroy Creations · Author: Grastroy Creations, Korcakov Roman.
+Company: GRASTROY Creations · Author: GRASTROY Creations, Korcakov Roman.

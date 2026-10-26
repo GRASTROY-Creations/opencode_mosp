@@ -5,7 +5,7 @@ Entries are never edited after the fact; corrections are new entries.
 
 ## 2026-10-26 — Adjustment 24: knowledge base created (D-0025 … D-0031)
 
-Owner applied the Grastroy Creations standards (General, Agents, Coding
+Owner applied the GRASTROY Creations standards (General, Agents, Coding
 Standard, Licenses, Security). The former `docs/` tree was moved **verbatim**
 into `.docs/` (plain file moves; no content removed) and the old directory was
 removed once empty.

@@ -7,7 +7,7 @@
 ## Decision
 
 The project keeps the MIT license (`LICENSE`, `package.json`). The copyright
-holder line is updated to **Grastroy Creations, Korcakov Roman**. This is an
+holder line is updated to **GRASTROY Creations, Korcakov Roman**. This is an
 owner-approved exception to the closed-source default.
 
 ## Dependency audit (2026-10-26, from installed `package.json` files)
