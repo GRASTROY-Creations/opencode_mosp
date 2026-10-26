@@ -19,7 +19,7 @@ Live checks are separate and network-bound: `bun run validate:mappings`
 | `ranking.test.ts` | Numeric/name sorting, missing last both directions, independent Coding/Intel sorting, no mutation | G4 |
 | `model-filter.test.ts` | Provider/presence/free filters | G4 |
 | `cache.test.ts` | Envelope validation, TTL freshness, atomic file writes | G3 |
-| `model-overview.test.ts` | Cache-only reads, refresh with failure isolation, last-known-good, host-first catalog, both metrics attach | G1, G3 |
+| `mosp.test.ts` | Cache-only reads, refresh with failure isolation, last-known-good, host-first catalog, both metrics attach | G1, G3 |
 | `panel-controller.test.ts` | Command parsing, sort transitions, row derivation, table/status/sidebar text, update label, empty-state hint | G4 |
 
 Not automated: rendering inside the OpenCode host (painting model, clicks) —

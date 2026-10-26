@@ -102,7 +102,7 @@ includes query strings, headers, or credentials in errors.
 
 ## Aggregation and caching
 
-`src/services/model-overview.ts` assembles snapshots and
+`src/services/mosp.ts` assembles snapshots and
 `src/services/cache.ts` persists per-source payloads:
 
 - `f_getModelOverview` / `f_getOverviewStatus` are cache-only reads;

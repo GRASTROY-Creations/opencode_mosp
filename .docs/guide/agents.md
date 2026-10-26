@@ -53,9 +53,9 @@ See [coding-standard.md](coding-standard.md).
 ## How these apply here
 
 - User data touched by this plugin: the cache directory
-  (`OPENCODE_MODEL_OVERVIEW_CACHE_DIR` or the XDG cache path,
+  (`OPENCODE_MOSP_CACHE_DIR` or the XDG cache path,
   `src/services/cache.ts`) and the persisted view preferences
-  (`model-overview.preferences`, `src/ui/panel-controller.ts`). Changing their
+  (`mosp.preferences`, `src/ui/panel-controller.ts`). Changing their
   location, format or schema version (`k_cacheSchemaVersion`) discards existing
   data → rule 5 applies.
 - Versioning and commits: agents set the version for the next commit

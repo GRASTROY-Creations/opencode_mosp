@@ -11,11 +11,11 @@ Status values: **active** · **superseded** (link to the replacement) · **open*
 | ID | Date | Decision | Requirement / trigger | Code references | Status |
 |---|---|---|---|---|---|
 | D-0001 | 2026-10-24 | Repo & tooling skeleton; TypeScript pinned to 6.0.3 (typescript-eslint range) | PLAN "Phase 0" | `package.json`, `tsconfig.json`, `eslint.config.js` | active |
-| D-0002 | 2026-10-24 | Native `session.panel` + `sidebar.content` PoC; sources verified | PLAN "Phase 1" | `src/tui.tsx`, `.opencode/plugins/model-overview/` | active |
+| D-0002 | 2026-10-24 | Native `session.panel` + `sidebar.content` PoC; sources verified | PLAN "Phase 1" | `src/tui.tsx`, `.opencode/plugins/mosp/` | active |
 | D-0003 | 2026-10-24 | Domain contracts: missing = `null`, score ≠ rank | PLAN "Phase 2" | `src/domain/*` | active (rank removed by D-0023) |
 | D-0004 | 2026-10-24 | Adapters with `AdapterResult`, shared fetch policy | PLAN "Phase 3" | `src/providers/*`, `src/utils/fetch-json.ts` | active (GPQA/LCB adapters superseded by D-0020) |
 | D-0005 | 2026-10-24 | Conservative matching; ambiguity ⇒ unmatched; pure sorting | PLAN "Phase 4" | `src/services/model-matching.ts`, `src/services/ranking.ts` | active |
-| D-0006 | 2026-10-24 | Per-source cache, TTLs, last-known-good, in-flight dedup | PLAN "Phase 5" | `src/services/cache.ts`, `src/services/model-overview.ts` | active |
+| D-0006 | 2026-10-24 | Per-source cache, TTLs, last-known-good, in-flight dedup | PLAN "Phase 5" | `src/services/cache.ts`, `src/services/mosp.ts` | active |
 | D-0007 | 2026-10-24 | Renderer-agnostic controller + SolidJS view | PLAN "Phase 6" | `src/ui/panel-controller.ts`, `src/tui.tsx` | active |
 | D-0008 | 2026-10-24 | Header-click collapse opt-in via env flag | PLAN "Adjustment (owner request" (first bullet under Phase 6) | `f_resolveHeaderCollapseEnabled` | active |
 | D-0009 | 2026-10-24 | Explicit chip selection marker | PLAN "Adjustment 2" | `f_formatChipLabel` | superseded by D-0010 |

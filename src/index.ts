@@ -11,7 +11,7 @@ import { Plugin } from "@opencode/plugin";
  * sanctioned exception to the no-default-export rule (.docs/guide/naming-conventions.md).
  */
 export default Plugin.define({
-  id: "opencode_model_overview",
+  id: "opencode_mosp",
   setup() {
     // No server-side registration yet.
   },

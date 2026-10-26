@@ -10,7 +10,7 @@
 No build step is added. OpenCode loads this plugin directly from TypeScript
 source:
 
-- development: `.opencode/plugins/model-overview/{index,tui}.ts` re-export
+- development: `.opencode/plugins/mosp/{index,tui}.ts` re-export
   `src/index.ts` / `src/tui.tsx`;
 - package: `package.json` `exports` → `./src/index.ts`, `./src/tui.tsx`.
 

@@ -8,7 +8,7 @@
 
 import { describe, expect, test } from "bun:test";
 import type { OverviewState, SourceStatus } from "../../src/domain/source-status";
-import type { ModelOverviewSnapshot } from "../../src/services/model-overview";
+import type { ModelOverviewSnapshot } from "../../src/services/mosp";
 import {
   f_formatContext,
   f_formatPrice,
@@ -373,7 +373,7 @@ describe("status text", () => {
 
 describe("header collapse flag", () => {
   test("env flag is opt-in with truthy values only", () => {
-    expect(k_headerCollapseEnvVar).toBe("OPENCODE_MODEL_OVERVIEW_HEADER_COLLAPSE");
+    expect(k_headerCollapseEnvVar).toBe("OPENCODE_MOSP_HEADER_COLLAPSE");
     expect(f_resolveHeaderCollapseEnabled({})).toBe(false);
     expect(f_resolveHeaderCollapseEnabled({ [k_headerCollapseEnvVar]: "" })).toBe(false);
     for (const vl_value of ["1", "true", "TRUE", " on ", "yes", "Yes"]) {

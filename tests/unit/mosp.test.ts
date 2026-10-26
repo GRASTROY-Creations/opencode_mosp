@@ -14,7 +14,7 @@ import {
   f_refreshModelOverview,
   f_resolveRequestTimeoutMs,
   k_defaultRequestTimeoutMs,
-} from "../../src/services/model-overview";
+} from "../../src/services/mosp";
 import { f_createTestBenchmark, f_createTestModel } from "./test-models";
 
 const k_now = new Date("2026-10-24T12:00:00.000Z");

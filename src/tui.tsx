@@ -20,7 +20,7 @@ import {
 } from "./ui/panel-controller";
 
 /**
- * Model Overview — TUI entrypoint.
+ * MOSP — TUI entrypoint.
  *
  * The panel is a pure renderer over `src/ui/panel-controller.ts`:
  * - model data is read host-first: the live OpenCode location catalog wins
@@ -41,7 +41,7 @@ import {
  * which would flicker constantly. See .docs/guide/architecture/ui-integration.md.
  */
 
-const k_panelName = "model-overview";
+const k_panelName = "mosp";
 
 // Interaction state is shared at module scope on purpose: the host may
 // re-render (or re-create) the slot component between a mouse `down` and its
@@ -132,7 +132,7 @@ function ModelOverviewPanel(props: {
         borderStyle="single"
         borderColor={context.theme.border.base}
         backgroundColor={context.theme.background.raised.base}
-        title="Model Overview"
+        title="MOSP"
         bottomTitle={
           props.controller.headerCollapseEnabled
             ? "esc closes · click header to collapse · /mosp toggle"
@@ -153,9 +153,7 @@ function ModelOverviewPanel(props: {
           onMouseUp={() => fh_endPress("panel-header", props.controller.toggleCollapsed)}
         >
           <text fg={context.theme.text.base}>
-            {props.controller.headerCollapseEnabled
-              ? `${vl_collapsed ? "▸" : "▾"} Model Overview`
-              : "Model Overview"}
+            {props.controller.headerCollapseEnabled ? `${vl_collapsed ? "▸" : "▾"} MOSP` : "MOSP"}
           </text>
           <text fg={context.theme.text.faint}>
             {`${vl_modelCount} models${vl_loading ? " · refreshing…" : ""}`}
@@ -257,13 +255,13 @@ function fh_setup(context: Plugin.Context): () => void {
     const vl_current = context.ui.panel.current();
     if (vl_current?.name === k_panelName) {
       context.ui.panel.close();
-      context.ui.toast.show({ title: "Model overview", message: "Panel closed.", variant: "info" });
+      context.ui.toast.show({ title: "MOSP", message: "Panel closed.", variant: "info" });
       return;
     }
     const vl_opened = context.ui.panel.open(k_panelName, { presentation: "panel" });
     if (!vl_opened) {
       context.ui.toast.show({
-        title: "Model overview",
+        title: "MOSP",
         message: "No active session — open a session first.",
         variant: "warning",
       });
@@ -274,13 +272,13 @@ function fh_setup(context: Plugin.Context): () => void {
     const vl_snapshot = await controller.refresh(true);
     if (vl_snapshot === undefined) {
       context.ui.toast.show({
-        title: "Model overview",
+        title: "MOSP",
         message: "Update failed — see /mosp status for details.",
         variant: "warning",
       });
       return;
     }
-    context.ui.toast.show({ title: "Model overview", message: f_describeSnapshot(vl_snapshot) });
+    context.ui.toast.show({ title: "MOSP", message: f_describeSnapshot(vl_snapshot) });
   }
 
   function fh_showStatus(): void {
@@ -293,7 +291,7 @@ function fh_setup(context: Plugin.Context): () => void {
       controller.lastError(),
     );
     void context.ui.dialog.alert({
-      title: "Model overview status",
+      title: "MOSP status",
       message: vl_lines.join("\n"),
     });
   }
@@ -302,7 +300,7 @@ function fh_setup(context: Plugin.Context): () => void {
     const vl_command = f_parseOverviewCommand(raw ?? "");
     if (vl_command === undefined) {
       context.ui.toast.show({
-        title: "Model overview",
+        title: "MOSP",
         message: `Unknown command. Usage: ${k_overviewUsage}`,
         variant: "warning",
       });
@@ -321,7 +319,7 @@ function fh_setup(context: Plugin.Context): () => void {
       case "redraw":
         void controller.loadSnapshot();
         context.ui.toast.show({
-          title: "Model overview",
+          title: "MOSP",
           message: "View redrawn from cache.",
           variant: "info",
         });
@@ -329,7 +327,7 @@ function fh_setup(context: Plugin.Context): () => void {
       case "sort":
         controller.toggleSort(vl_command.key);
         context.ui.toast.show({
-          title: "Model overview",
+          title: "MOSP",
           message: `Sorting by ${f_getSortKeyLabel(vl_command.key)}.`,
           variant: "info",
         });
@@ -358,40 +356,40 @@ function fh_setup(context: Plugin.Context): () => void {
     mode: "global",
     commands: [
       {
-        id: "model_overview.toggle",
-        title: "Model overview: toggle panel",
-        group: "Model overview",
+        id: "mosp.toggle",
+        title: "MOSP: toggle panel",
+        group: "MOSP",
         palette: true,
         suggested: true,
         run: fh_togglePanel,
       },
       {
-        id: "model_overview.status",
-        title: "Model overview: status",
-        group: "Model overview",
+        id: "mosp.status",
+        title: "MOSP: status",
+        group: "MOSP",
         palette: true,
         run: fh_showStatus,
       },
       {
-        id: "model_overview.update",
-        title: "Model overview: update data",
-        group: "Model overview",
+        id: "mosp.update",
+        title: "MOSP: update data",
+        group: "MOSP",
         palette: true,
         run: fh_updateDataWithToast,
       },
       {
-        id: "model_overview.redraw",
-        title: "Model overview: redraw view",
-        group: "Model overview",
+        id: "mosp.redraw",
+        title: "MOSP: redraw view",
+        group: "MOSP",
         palette: true,
         run: () => {
           void controller.loadSnapshot();
         },
       },
       {
-        id: "model_overview.command",
-        title: "Model overview: run command",
-        group: "Model overview",
+        id: "mosp.command",
+        title: "MOSP: run command",
+        group: "MOSP",
         slash: { name: "mosp", arguments: true },
         run: fh_runCommand,
       },
@@ -404,4 +402,4 @@ function fh_setup(context: Plugin.Context): () => void {
   };
 }
 
-export default Plugin.define({ id: "opencode_model_overview.tui", setup: fh_setup });
+export default Plugin.define({ id: "opencode_mosp.tui", setup: fh_setup });

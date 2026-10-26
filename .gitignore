@@ -112,7 +112,7 @@ dist
 # TernJS port file
 .tern-port
 
-# --- opencode_model_overview project-specific (docs/PLAN.md §2) ---
+# --- opencode_mosp project-specific (docs/PLAN.md §2) ---
 # direnv state and local env overrides
 .direnv/
 .envrc.local
@@ -127,7 +127,7 @@ dist
 # OpenCode local state that may contain credentials
 auth.json
 .opencode/auth.json
-docs/SECRET_KNOWLEDGE_01.md
-docs/SECRET_KNOWLEDGE_02.md
+.docs/SECRET_KNOWLEDGE_01.md
+.docs/SECRET_KNOWLEDGE_02.md
 docs/huggingface_leaderboard.json
 docs/livecodebench_performances_generation.json

@@ -20,7 +20,7 @@ const k_ttlMs = 60_000;
 const k_payload = [{ source: "fixture", value: 42 }];
 
 async function fh_createTempDirectory(): Promise<string> {
-  return mkdtemp(join(tmpdir(), "model-overview-cache-"));
+  return mkdtemp(join(tmpdir(), "mosp-cache-"));
 }
 
 describe("f_createMemoryCache", () => {
@@ -257,11 +257,9 @@ describe("f_getDefaultCacheDirectory", () => {
 
     try {
       delete process.env[k_cacheDirectoryEnv];
-      process.env.XDG_CACHE_HOME = "/tmp/model-overview-xdg";
+      process.env.XDG_CACHE_HOME = "/tmp/mosp-xdg";
 
-      expect(f_getDefaultCacheDirectory()).toBe(
-        resolve("/tmp/model-overview-xdg", "opencode-model-overview"),
-      );
+      expect(f_getDefaultCacheDirectory()).toBe(resolve("/tmp/mosp-xdg", "opencode-mosp"));
     } finally {
       if (vl_previousDirectory !== undefined) {
         process.env[k_cacheDirectoryEnv] = vl_previousDirectory;

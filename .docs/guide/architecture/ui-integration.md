@@ -11,17 +11,17 @@ types/sources, not from prose docs.
 import { Plugin, usePlugin } from "@opencode/plugin/tui";
 
 export default Plugin.define({
-  id: "opencode_model_overview.tui",
+  id: "opencode_mosp.tui",
   setup(context) { /* register slots, keymap layers, storage */ },
 });
 ```
 
 - `setup` may return a cleanup function; the host calls it on unload.
-- **Development loading (this repo):** `.opencode/plugins/model-overview/`
+- **Development loading (this repo):** `.opencode/plugins/mosp/`
   is a plugin directory with the published-package layout: `index.ts` (inert
   server half) and `tui.ts` (TUI entry). The TUI entry re-exports `src/tui.tsx`,
   so the real code stays in `src/` and is type-checked.
-  > **Important:** a flat file such as `.opencode/plugins/model-overview.ts`
+  > **Important:** a flat file such as `.opencode/plugins/mosp.ts`
   > is discovered as a **server** plugin only. TUI code placed there fails at
   > startup — the server runtime transpiles `.tsx` with a React JSX default and
   > reports `Cannot find package 'react'`. TUI plugins must live in a
@@ -86,14 +86,14 @@ ancestor. Returns a disposer.
 Panel visibility is host state:
 
 ```ts
-ui.panel.open("model-overview", { presentation: "panel" }): boolean
+ui.panel.open("mosp", { presentation: "panel" }): boolean
 ui.panel.close(): void                    // only this plugin's panel
 ui.panel.current(): { name, sessionID } | undefined   // reactive
 ```
 
 `open` returns `false` when no session is active (handled with a warning
 toast). The panel contribution renders only when the incoming slot `name`
-matches `model-overview`.
+matches `mosp`.
 
 ## Keymap layer (`context.keymap.layer`)
 
@@ -121,16 +121,16 @@ The factory is pure and runs reactively; it returns:
 - The `bindings` array enables commands whose key syntax comes from the
   **user's** configuration. We deliberately assign no `bind` ourselves:
   guessing key syntax or colliding with a host binding is worse than
-  palette/slash-only. Users can bind `model_overview.*` ids in their config.
+  palette/slash-only. Users can bind `mosp.*` ids in their config.
 
 Registered commands (no binds):
 
 | id | Purpose |
 |---|---|
-| `model_overview.toggle` | open/close the panel (suggested in palette) |
-| `model_overview.status` | dialog with snapshot + per-source freshness |
-| `model_overview.refresh` | `f_refreshModelOverview` with force, toast summary |
-| `model_overview.command` | slash `/mosp` with raw args |
+| `mosp.toggle` | open/close the panel (suggested in palette) |
+| `mosp.status` | dialog with snapshot + per-source freshness |
+| `mosp.refresh` | `f_refreshModelOverview` with force, toast summary |
+| `mosp.command` | slash `/mosp` with raw args |
 
 `/mosp [toggle | status | update | redraw | sort <column>]` — sort tokens:
 `coding`, `intel`/`intelligence`, `ctx`, `input-price`, `output-price`, or any
@@ -149,8 +149,8 @@ Keys used by the panel (preferences are never mixed with cached data):
 
 | Key | Kind | Shape |
 |---|---|---|
-| `model-overview.preferences` | `store` | `{ sortKey, sortDirection, collapsed }` (read once at startup to seed the controller signals) |
-| `model-overview.filters` | `memory` | `{ freeOnly }` |
+| `mosp.preferences` | `store` | `{ sortKey, sortDirection, collapsed }` (read once at startup to seed the controller signals) |
+| `mosp.filters` | `memory` | `{ freeOnly }` |
 
 A stored shape from an older version is normalized once back to defaults at
 startup. Benchmark/model data lives only in the file cache
@@ -238,7 +238,7 @@ startup. Benchmark/model data lives only in the file cache
 6. When header-click collapse is enabled, collapse state survives panel toggles;
    sorting and the free filter always survive toggles and collapse; repeated
    toggles never fetch.
-7. Header-click collapse is **opt-in** via `OPENCODE_MODEL_OVERVIEW_HEADER_COLLAPSE`
+7. Header-click collapse is **opt-in** via `OPENCODE_MOSP_HEADER_COLLAPSE`
    (`1|true|on|yes`, trimmed, case-insensitive; anything else or unset = disabled).
    While disabled (default) the `▸`/`▾` indicator is hidden, the header click is a
    no-op, and a stale persisted `collapsed: true` is normalized back to expanded on
@@ -254,7 +254,7 @@ startup. Benchmark/model data lives only in the file cache
 
 1. In this project directory, start or reload the TUI (`/reload` forces it).
 2. `/mosp toggle` → panel appears; with
-   `OPENCODE_MODEL_OVERVIEW_HEADER_COLLAPSE` exported (`=true`) the header click
+   `OPENCODE_MOSP_HEADER_COLLAPSE` exported (`=true`) the header click
    collapses/expands it; without it the header click does nothing and no `▸/▾`
    indicator is shown; repeating the command closes the panel.
 3. `/mosp update` → update toast; footer freshness updates; no network on plain
@@ -278,7 +278,7 @@ startup. Benchmark/model data lives only in the file cache
    does nothing. Press bookkeeping is module-scope, so clicks keep working even
    if the host re-renders the panel between press and release.
 8. `/mosp status` → dialog with the full status breakdown.
-9. Palette lists the `Model overview:` entries; slash `/mosp` autocompletes.
+9. Palette lists the `MOSP:` entries; slash `/mosp` autocompletes.
 10. Stop a source (offline) → panel stays usable, footer shows `partial`/`stale`.
 
 If the plugin fails to load, the service log

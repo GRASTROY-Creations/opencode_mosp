@@ -1,6 +1,6 @@
-# opencode_model_overview
+# opencode_mosp
 
-OpenCode plugin (`/mosp`) that shows a sortable overview of the models
+OpenCode "Model Overview Side Panel" (`/mosp`) plugin that shows a sortable overview of the models
 available to your OpenCode installation: provider, context window, input/output
 price (USD per 1M tokens), and two LLMBenchmark.ai scores — the Artificial
 Analysis **coding index** and **intelligence index**.

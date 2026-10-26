@@ -1,4 +1,4 @@
-Execution plan: opencode_model_overview
+Execution plan: opencode_mosp
 
 A detailed implementation specification for coding agents, using Bun, TypeScript, OpenCode's plugin API, authenticated model pricing where available, external benchmark data, and a collapsible model overview panel.
 
@@ -6,7 +6,7 @@ Project specification
 
 Plugin
 
-opencode_model_overview
+opencode_mosp
 
 Owner
 
@@ -222,7 +222,7 @@ If a native sidebar is not supported, implement the data layer and command-drive
 
 The target UI is a model overview panel with a header, toolbar, sortable columns, and a collapsible state.
 
-Model Overview
+MOSP
 
 v0.1.0
 
@@ -300,7 +300,7 @@ The table should not display a fake rank when a model has no benchmark result. D
 
 Use a modular architecture so the API adapters, ranking logic, table sorting, and UI can be tested independently.
 
-opencode_model_overview/
+opencode_mosp/
 ├── .envrc
 ├── .env.example
 ├── .gitignore
@@ -342,7 +342,7 @@ opencode_model_overview/
 │   │   ├── huggingface-gpqa.ts
 │   │   └── livecodebench.ts
 │   ├── services/
-│   │   ├── model-overview.ts
+│   │   ├── mosp.ts
 │   │   ├── model-matching.ts
 │   │   ├── ranking.ts
 │   │   └── cache.ts
@@ -369,7 +369,7 @@ opencode_model_overview/
 The .opencode/plugins/ directory is the documented location for a project-local plugin. The repository can maintain src/index.ts as the source of truth and use a build or development script to place the runnable plugin in .opencode/plugins/. Alternatively, keep the entry point directly there and use imports from src/. Select one approach after confirming how the target OpenCode version loads local TypeScript modules. 
 OpenCode
 
-Recommended initial choice: use .opencode/plugins/opencode-model-overview.ts as the thin runtime entry point and keep reusable modules under src/. Avoid maintaining two independent copies of plugin logic.
+Recommended initial choice: use .opencode/plugins/opencode-mosp.ts as the thin runtime entry point and keep reusable modules under src/. Avoid maintaining two independent copies of plugin logic.
 
 5. Coding standards and project configuration
 5.1 Naming conventions
@@ -593,7 +593,7 @@ The following is the target configuration template. The coding agent must resolv
 
 
 {
-  "name": "opencode_model_overview",
+  "name": "opencode_mosp",
   "version": "0.1.0",
   "private": true,
   "description": "OpenCode model pricing and benchmark overview",
@@ -668,7 +668,7 @@ Create .envrc:
 # Local development configuration only.
 # Do not put real API tokens in a committed file.
 
-export PLUGIN_NAME="opencode_model_overview"
+export PLUGIN_NAME="opencode_mosp"
 export PLUGIN_VERSION="0.1.0"
 export PLUGIN_OWNER="GRASTROY Creations"
 
@@ -1169,7 +1169,7 @@ For users who want to sort by price, use ascending order to show the cheapest mo
 
 9. Aggregation service
 
-Create src/services/model-overview.ts.
+Create src/services/mosp.ts.
 
 This service coordinates the adapters, matching, and caching layers. It should return normalized records even when one external source fails.
 
@@ -1405,7 +1405,7 @@ Action
 
 
 
-/model-overview
+/mosp
 
 	
 
@@ -1414,7 +1414,7 @@ Open or display the model overview
 
 
 
-/model-overview refresh
+/mosp refresh
 
 	
 
@@ -1423,7 +1423,7 @@ Refresh model, price, and benchmark data
 
 
 
-/model-overview sort gpqa
+/mosp sort gpqa
 
 	
 
@@ -1432,7 +1432,7 @@ Sort by GPQA rank
 
 
 
-/model-overview sort input-price
+/mosp sort input-price
 
 	
 
@@ -1441,7 +1441,7 @@ Sort by input price
 
 
 
-/model-overview sort output-price
+/mosp sort output-price
 
 	
 
@@ -1450,7 +1450,7 @@ Sort by output price
 
 
 
-/model-overview ranking livecodebench
+/mosp ranking livecodebench
 
 	
 
@@ -1459,7 +1459,7 @@ Switch primary ranking
 
 
 
-/model-overview toggle
+/mosp toggle
 
 	
 
@@ -1468,7 +1468,7 @@ Toggle visibility or display mode
 
 
 
-/model-overview status
+/mosp status
 
 	
 
@@ -1846,7 +1846,7 @@ Package version: 0.1.0.
 
 License: MIT.
 
-Repository/package name: opencode_model_overview.
+Repository/package name: opencode_mosp.
 
 Have the maintainer provide the appropriate copyright year and legal entity details if needed. Do not invent a legal company address or other corporate identifiers.
 
@@ -2085,9 +2085,9 @@ Copy checklist
 20. Master instruction for the coding agent
 
 The following instruction can be used as the initial task prompt for an autonomous coding agent.
-# Task: Implement opencode_model_overview
+# Task: Implement opencode_mosp
 
-You are the implementation agent for `opencode_model_overview`, owned by GRASTROY Creations, version 0.1.0, MIT License.
+You are the implementation agent for `opencode_mosp`, owned by GRASTROY Creations, version 0.1.0, MIT License.
 
 ## Objective
 

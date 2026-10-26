@@ -1,4 +1,4 @@
-# opencode_model_overview — Knowledge Base
+# opencode_mosp — Knowledge Base
 
 Company: GRASTROY Creations · Author: GRASTROY Creations, Korcakov Roman · License: MIT
 (see [decisions/D-0028](decisions/D-0028-license.md)).

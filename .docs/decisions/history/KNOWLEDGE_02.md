@@ -1,11 +1,11 @@
-Here is the extreme detailed execution plan for coding agents to build the `opencode_model_overview` plugin, strictly adhering to your naming conventions, tech stack, and OpenCode v2 plugin architecture [[89]].
+Here is the extreme detailed execution plan for coding agents to build the `opencode_mosp` plugin, strictly adhering to your naming conventions, tech stack, and OpenCode v2 plugin architecture [[89]].
 
 ---
 
 ### **Step 1: Project Initialization & Configuration**
 **Substep 1.1: Initialize Bun Project**
 ```bash
-mkdir opencode_model_overview && cd opencode_model_overview
+mkdir opencode_mosp && cd opencode_mosp
 bun init -y
 bun add -d typescript eslint @typescript-eslint/parser @typescript-eslint/eslint-plugin
 bun add @opencode-ai/plugin @opentui/solid solid-js
@@ -55,7 +55,7 @@ Run `direnv allow`.
 ### **Step 2: Documentation & Architecture**
 **Substep 2.1: Create `/docs/architecture.md`**
 ```markdown
-# Architecture: opencode_model_overview
+# Architecture: opencode_mosp
 
 ## Data Flow
 1. **Fetch**: `fh_fetch_opencode_models` retrieves available models and base pricing from `https://opencode.ai/inference/v1/models`.
@@ -77,7 +77,7 @@ Document the enforced prefixes: `f_` (functions), `fh_` (helpers), `g_` (globals
 ### **Step 3: Core Types & Constants**
 **File: `src/types.ts`**
 ```typescript
-export const k_PLUGIN_NAME = "opencode_model_overview";
+export const k_PLUGIN_NAME = "opencode_mosp";
 export const k_COMPANY = "GRASTROY Creations";
 export const k_VERSION = process.env.PLUGIN_VERSION || "0.1.0";
 
@@ -209,7 +209,7 @@ export const f_render_model_table = (p_models: t_ModelData[]) => {
         cursor="pointer"
       >
         <Text color="white">
-          {vl_isCollapsed() ? "▶" : "▼"} Model Overview
+          {vl_isCollapsed() ? "▶" : "▼"} MOSP
         </Text>
       </Box>
       
@@ -301,7 +301,7 @@ export default Plugin.define({
 **Substep 8.1: Update `package.json`**
 ```json
 {
-  "name": "opencode_model_overview",
+  "name": "opencode_mosp",
   "version": "0.1.0",
   "description": "OpenCode TUI sidebar plugin for model benchmark scores, token costs, and rankings.",
   "author": "GRASTROY Creations",
@@ -329,7 +329,7 @@ bunx tsc --noEmit
 ```bash
 git init
 git add .
-git commit -m "chore: initial commit of opencode_model_overview v0.1.0"
+git commit -m "chore: initial commit of opencode_mosp v0.1.0"
 # User will handle remote push as specified.
 ```
 

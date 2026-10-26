@@ -1,5 +1,5 @@
 /**
- * Project-local TUI entry for the Model Overview plugin.
+ * Project-local TUI entry for the MOSP plugin.
  *
  * OpenCode loads `<project>/.opencode/plugins/<name>/tui.ts` in the terminal
  * runtime. This thin loader exists so the real implementation stays in

@@ -27,7 +27,7 @@ export const k_defaultModelCacheTtlMs = 60 * 60 * 1000;
 export const k_defaultBenchmarkCacheTtlMs = 6 * 60 * 60 * 1000;
 
 /** Optional explicit cache directory; otherwise the XDG cache path is used. */
-export const k_cacheDirectoryEnv = "OPENCODE_MODEL_OVERVIEW_CACHE_DIR";
+export const k_cacheDirectoryEnv = "OPENCODE_MOSP_CACHE_DIR";
 
 /** One cache file, validated at the envelope level. */
 export interface CacheEnvelope {
@@ -230,9 +230,9 @@ export function f_createFileCache(p_directory: string): OverviewCache {
 
 /**
  * Resolve the user cache directory:
- * 1. `OPENCODE_MODEL_OVERVIEW_CACHE_DIR` when set;
- * 2. `$XDG_CACHE_HOME/opencode-model-overview`;
- * 3. `~/.cache/opencode-model-overview`.
+ * 1. `OPENCODE_MOSP_CACHE_DIR` when set;
+ * 2. `$XDG_CACHE_HOME/opencode-mosp`;
+ * 3. `~/.cache/opencode-mosp`.
  */
 export function f_getDefaultCacheDirectory(): string {
   const vl_explicit = process.env[k_cacheDirectoryEnv]?.trim();
@@ -244,7 +244,7 @@ export function f_getDefaultCacheDirectory(): string {
   const vl_xdg = process.env.XDG_CACHE_HOME?.trim();
   const vl_base = vl_xdg !== undefined && vl_xdg.length > 0 ? vl_xdg : join(homedir(), ".cache");
 
-  return resolve(vl_base, "opencode-model-overview");
+  return resolve(vl_base, "opencode-mosp");
 }
 
 /**

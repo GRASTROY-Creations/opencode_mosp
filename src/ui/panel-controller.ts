@@ -53,7 +53,7 @@ import {
   f_resolveRequestTimeoutMs,
   type ModelOverviewSnapshot,
   type OverviewLoadContext,
-} from "../services/model-overview";
+} from "../services/mosp";
 import { f_sortModels } from "../services/ranking";
 import {
   f_formatContext,
@@ -64,9 +64,9 @@ import {
 } from "./format";
 
 /** Durable view preferences (survive collapse, restart, and refresh). */
-export const k_preferencesStorageKey = "model-overview.preferences";
+export const k_preferencesStorageKey = "mosp.preferences";
 /** Ephemeral filter toggles. */
-export const k_filtersStorageKey = "model-overview.filters";
+export const k_filtersStorageKey = "mosp.filters";
 
 export interface OverviewViewPreferences {
   sortKey: ModelSortKey;
@@ -92,7 +92,7 @@ export const k_defaultFilters: OverviewFilters = {
  * Opt-in env flag for header-click collapse. The gesture stays implemented but
  * is disabled by default so a stray click can never hide the table.
  */
-export const k_headerCollapseEnvVar = "OPENCODE_MODEL_OVERVIEW_HEADER_COLLAPSE";
+export const k_headerCollapseEnvVar = "OPENCODE_MOSP_HEADER_COLLAPSE";
 
 /** Only an explicit truthy value enables header-click collapse. */
 export function f_resolveHeaderCollapseEnabled(

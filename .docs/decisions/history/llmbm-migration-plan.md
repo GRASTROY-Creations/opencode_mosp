@@ -73,7 +73,7 @@ export interface ModelBenchmark {
 - `tests/unit/gpqa-adapter.test.ts`
 - `tests/unit/livecodebench-adapter.test.ts`
 
-### 2.2 Remove from `model-overview.ts`
+### 2.2 Remove from `mosp.ts`
 - Remove `OverviewBenchmarkLoader` type
 - Remove `loadGpqa`, `loadLiveCodeBench` from `OverviewRefreshOptions`
 - Remove GPQA/LCB jobs from `fh_performRefresh`
@@ -125,7 +125,7 @@ Based on KNOWLEDGE_08 but cleaned up:
 - `null` for truly unknown (beam-free, big-pickle, flint-40b-free, etc.)
 - Document fallback logic in comments
 
-### 3.4 Update `model-overview.ts`
+### 3.4 Update `mosp.ts`
 - Add `loadLlmbm: OverviewLlmbmLoader` to `OverviewRefreshOptions`
 - Add `fh_readLlmbm` to `fh_readAllSources`
 - Add LLMBM job to `fh_performRefresh`
@@ -193,16 +193,16 @@ export interface LLMBMMapping {
 ### 5.2 Remove Tests
 - `tests/unit/gpqa-adapter.test.ts`
 - `tests/unit/livecodebench-adapter.test.ts`
-- GPQA/LCB related tests in `model-matching.test.ts`, `model-overview.test.ts`, `model-filter.test.ts`
+- GPQA/LCB related tests in `model-matching.test.ts`, `mosp.test.ts`, `model-filter.test.ts`
 
 ### 5.3 New Tests
 - `tests/unit/llmbm-adapter.test.ts` — parse, cache, fetch wrapper, empty fail
-- `model-overview.test.ts` — host-first + LLMBM attach, cache fallback, LLMBM failure isolation
+- `mosp.test.ts` — host-first + LLMBM attach, cache fallback, LLMBM failure isolation
 - `model-matching.test.ts` — LLMBM mapping attach (exact, family_fallback, null), casefold lookup
 - `llmbm-adapter.test.ts` — parse, cache, fetch wrapper, empty fail
 
 ### 5.4 Update Existing Tests
-- `model-overview.test.ts` — replace GPQA/LCB fixtures with LLMBM
+- `mosp.test.ts` — replace GPQA/LCB fixtures with LLMBM
 - `model-matching.test.ts` — replace GPQA/LCB mapping tests with LLMBM
 - `panel-controller.test.ts` — status line expectations, snapshot helper
 
@@ -263,7 +263,7 @@ bun run check  # typecheck + lint + tests (expect ~170+ tests, ~580+ expects)
 1. **Schema** — `model-benchmark.ts`, `model-record.ts`, `model-sort.ts`, `source-status.ts`
 2. **Delete GPQA/LCB** — providers, fixtures, tests, imports
 3. **LLMBM Adapter** — `llmbm.ts`, `llmbm-mappings.ts`, types
-4. **Service Integration** — `model-overview.ts`, `panel-controller.ts`
+4. **Service Integration** — `mosp.ts`, `panel-controller.ts`
 5. **Matching** — `llmbm-mappings.ts`, `model-matching.ts` updates
 6. **UI** — `tui.tsx` column changes
 7. **Fixtures & Tests** — new fixtures, adapter tests, update existing

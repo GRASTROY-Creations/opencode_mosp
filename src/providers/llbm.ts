@@ -20,7 +20,7 @@
  *
  * The parse fails only when no metric yields a row; a single empty metric is
  * a normal partial dataset (its column shows `—`). Cache/TTL ownership stays
- * with the model-overview service; this adapter never touches the filesystem.
+ * with the mosp service; this adapter never touches the filesystem.
  * Error text never includes URLs or payloads.
  */
 

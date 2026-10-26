@@ -1,7 +1,7 @@
 # Caching and aggregation
 
 Phase 5 introduced a per-source cache and the aggregation service
-(`src/services/cache.ts`, `src/services/model-overview.ts`). This document is
+(`src/services/cache.ts`, `src/services/mosp.ts`). This document is
 the reference for what is stored, where it lives, and how staleness is handled.
 
 ## Principles
@@ -64,9 +64,9 @@ invalidates old entries cleanly.
 ## Location and writes
 
 - `f_getDefaultCacheDirectory()` resolves, in order:
-  1. `OPENCODE_MODEL_OVERVIEW_CACHE_DIR`
-  2. `$XDG_CACHE_HOME/opencode-model-overview`
-  3. `~/.cache/opencode-model-overview`
+  1. `OPENCODE_MOSP_CACHE_DIR`
+  2. `$XDG_CACHE_HOME/opencode-mosp`
+  3. `~/.cache/opencode-mosp`
 - The file cache writes one `<source>.json` per source. Writes create the
   directory with mode `0o700`, write a unique temporary file with mode `0o600`,
   and `rename` it into place, so a crash never leaves a half-written entry.
@@ -127,7 +127,7 @@ tracks failed attempts made during the current process.
 
 `tests/unit/cache.test.ts` covers round-trips, the freshness boundary, invalid
 writes, corrupt/mismatched envelopes, atomic overwrite, and environment
-resolution. `tests/unit/model-overview.test.ts` covers ready/partial/stale/error
+resolution. `tests/unit/mosp.test.ts` covers ready/partial/stale/error
 aggregation, last-known-good preservation, empty-payload rejection, loader
 exception sanitization, concurrent dedup, force refresh, cache-write warnings,
 and merge behavior. Neither suite performs network I/O.

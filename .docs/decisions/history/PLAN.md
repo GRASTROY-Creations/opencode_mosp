@@ -1,8 +1,8 @@
-# Implementation Plan: opencode_model_overview
+# Implementation Plan: opencode_mosp
 
 **Owner:** GRASTROY Creations · **Version:** 0.1.0 · **License:** MIT
 **Target runtime:** OpenCode v2.1.4 (verified installed) · Bun 1.4.2 · TypeScript · direnv
-**Scope constraint:** all work stays inside this project directory (`/mnt/PROJ/DEV/opencode_model_overview`).
+**Scope constraint:** all work stays inside this project directory (`/mnt/PROJ/DEV/opencode_mosp`).
 
 This plan consolidates the three knowledge documents, corrects them against the **verified** OpenCode v2
 plugin API, and defines the phased execution order with completion gates.
@@ -45,7 +45,7 @@ KNOWLEDGE_02's core instincts are right but the identifiers are wrong. Use these
    + `context.ui.panel.open(name, { presentation })` — host owns sizing/focus/fullscreen; contributions get
    reactive `name`, `sessionID`, `width`, `presentation`, `focused` + `focus`/`close`/`toggleFullscreen`.
 5. **Commands:** `context.keymap.layer(() => ({ mode, priority, commands: [{ id, title, group, bind,
-   palette, slash: { name, aliases, arguments }, run }], bindings }))` → gives palette, slash (`/model-overview …`)
+   palette, slash: { name, aliases, arguments }, run }], bindings }))` → gives palette, slash (`/mosp …`)
    and keybind actions in one registration → satisfies the "menu or command toggle" requirement.
 6. **Model & pricing discovery:** server plugins use `ctx.model.list()` / `ctx.provider.list()`;
    CLI plugins use `context.data.location.model.list(location)` (+ `provider`, `integration`, … sync/invalidate).
@@ -93,21 +93,21 @@ Current layout (as of Adjustment 22; the original KNOWLEDGE_03 sketch with
 GPQA/LiveCodeBench providers is superseded):
 
 ```
-opencode_model_overview/
+opencode_mosp/
 ├── .envrc / .env.example / .editorconfig / .npmrc / bunfig.toml
-├── .opencode/plugins/model-overview/{index,tui}.ts   # dev loader (thin re-exports)
+├── .opencode/plugins/mosp/{index,tui}.ts   # dev loader (thin re-exports)
 ├── docs/                      # knowledge docs + everything below
 │   ├── architecture/{data-flow,ui-integration,caching}.md
 │   ├── api/{opencode-models,opencode-pricing,llmbenchmark,models-dev}.md
 │   └── {development,naming-conventions,llmbm-migration-plan}.md
 ├── scripts/{generate-mappings,validate-mappings,live-data}.ts   # network-only tools
 ├── src/
-│   ├── index.ts               # server plugin (Plugin.define, id "opencode_model_overview")
+│   ├── index.ts               # server plugin (Plugin.define, id "opencode_mosp")
 │   ├── tui.tsx                # CLI plugin: slots, panel, commands, table renderer
 │   ├── config/llbm-mappings.ts
 │   ├── domain/{guards,model-record,model-benchmark,model-pricing,model-sort,source-status}.ts
 │   ├── providers/{opencode-models,opencode-pricing,llbm,models-dev,adapter-result}.ts
-│   ├── services/{model-overview,model-matching,model-filter,ranking,cache}.ts
+│   ├── services/{mosp,model-matching,model-filter,ranking,cache}.ts
 │   ├── ui/{panel-controller,format}.ts
 │   └── utils/fetch-json.ts
 ├── tests/{unit,fixtures}/
@@ -115,7 +115,7 @@ opencode_model_overview/
 ```
 
 Entry-point decision (KNOWLEDGE_03 §4): keep `src/` as source of truth; for local development, load via a
-`.opencode/plugins/model-overview/` **directory** (`index.ts` server entry + `tui.ts` TUI entry, each a thin re-export
+`.opencode/plugins/mosp/` **directory** (`index.ts` server entry + `tui.ts` TUI entry, each a thin re-export
 from `src/`) (single implementation, no copies). A flat file in `.opencode/plugins/` is server-only and cannot host the
 TUI plugin. Final form = publishable package with `"./tui"` export + `plugins` entry in `opencode.json(c)`.
 
@@ -150,7 +150,7 @@ TUI plugin. Final form = publishable package with `"./tui"` export + `plugins` e
 
 ### Phase 1 — Feasibility PoC + source verification *(the hard gates)* — **CODE DONE (2026-10-24); visual gate pending owner run**
 1. Minimal TUI plugin: register `session.panel` contribution + compact `sidebar.content` status +
-   `/model-overview` (and `toggle`) slash commands; verify it **loads and toggles in opencode 2.1.4**.
+   `/mosp` (and `toggle`) slash commands; verify it **loads and toggles in opencode 2.1.4**.
 2. Dump/inspect real `Model.Info` schema: IDs, names, `limit.context`, `cost` tier fields + **units**.
 3. Verify data sources; record each in `docs/api/*.md` with URL, auth, rate limits, license, example response, verification date:
    - HF `GET /api/datasets/{dataset_id}/leaderboard` — pick the dataset that actually contains GPQA; score direction; fixture.
@@ -160,8 +160,8 @@ TUI plugin. Final form = publishable package with `"./tui"` export + `plugins` e
   source is verified or explicitly flagged unavailable with a snapshot fallback designed.
 
 **Results:**
-- PoC implemented in `src/tui.tsx` (+ `.opencode/plugins/model-overview/{index,tui}.ts` dev loader): panel, sidebar strip,
-  palette commands, `/model-overview` with arguments. `typecheck` + `lint` green. **Owner must start/reload the
+- PoC implemented in `src/tui.tsx` (+ `.opencode/plugins/mosp/{index,tui}.ts` dev loader): panel, sidebar strip,
+  palette commands, `/mosp` with arguments. `typecheck` + `lint` green. **Owner must start/reload the
   TUI to confirm rendering/toggling** — checklist in `docs/architecture/ui-integration.md`.
 - `Model.Info` verified live (16 models, 1 provider). `cost` unit is schema-named
   `Money.USDPerMillionTokens`; tiers are `{ tier: { type: "context", size } }` (semantics assumed).
@@ -232,13 +232,13 @@ numeric prices, rank-vs-score distinct; default `gpqaRank asc`. Search + provide
   overwritten. Docs updated in `docs/architecture/data-flow.md`.
 
 ### Phase 5 — Aggregation & caching — **DONE (2026-10-24)**
-`model-overview.ts`: `f_getModelOverview / f_refreshModelOverview / f_mergeModelSources / f_matchBenchmarkRecords /
+`mosp.ts`: `f_getModelOverview / f_refreshModelOverview / f_mergeModelSources / f_matchBenchmarkRecords /
 f_getOverviewStatus / f_sortModels / f_filterModels`. Independent per-source fetch + failure isolation (one source down ⇒
 partial table, stale label; never whole-service crash). Cache: per-source keys, TTLs (models/pricing 1h, benchmarks 6h —
 tunable), schema version, atomic writes in a user cache dir, in-flight dedup, last-known-good preservation.
 - **Gate:** service returns usable partial results when any single optional source fails. ✅
 - **Implemented:** `src/services/cache.ts` (versioned envelope, memory + atomic file caches, TTL/env resolution,
-  `OPENCODE_MODEL_OVERVIEW_CACHE_DIR`), `src/services/model-overview.ts` (cache-only reads, parallel refresh with
+  `OPENCODE_MOSP_CACHE_DIR`), `src/services/mosp.ts` (cache-only reads, parallel refresh with
   in-flight dedup, last-known-good on failure, merge, derived `opencode-pricing` status, sanitized loader errors).
   `opencode-pricing` is a derived view of the registry payload — no fourth cache entry.
 - **Results:** 31 new tests → **123 tests / 406 assertions**; `bun run check` green. New `docs/architecture/caching.md`;
@@ -249,9 +249,9 @@ tunable), schema version, atomic writes in a user cache dir, in-flight dedup, la
   ranking selector (GPQA ↔ LiveCodeBench), search field, provider/missing/free filters, refresh action,
   last-refresh + per-source freshness/stale/error status, empty state, `N/A`/`—` for missing.
 - `sidebar.content`: compact summary (e.g., selected/active model rank + price, "open panel" hint).
-- Collapse/expand: mouse click on header toggle **and** `/model-overview toggle`; repeated toggles refetch nothing;
+- Collapse/expand: mouse click on header toggle **and** `/mosp toggle`; repeated toggles refetch nothing;
   sort/search/ranking state survive collapse; prefs persist via `context.storage.store`.
-- Commands via `keymap.layer`: `/model-overview [refresh|sort gpqa|sort input-price|sort output-price|ranking livecodebench|toggle|status]`, palette entry, keybind.
+- Commands via `keymap.layer`: `/mosp [refresh|sort gpqa|sort input-price|sort output-price|ranking livecodebench|toggle|status]`, palette entry, keybind.
 - UI kept behind adapter (`panel-controller` decoupled from renderer) so data layer is reusable.
 - **Gate:** table usable with complete *and* incomplete source data; both toggle mechanisms work in 2.1.4.
 - **Implemented:** `src/ui/panel-controller.ts` (renderer-agnostic state: durable view prefs with legacy
@@ -265,7 +265,7 @@ tunable), schema version, atomic writes in a user cache dir, in-flight dedup, la
 - **Gate result:** `bun run check` green — typecheck, lint, 150 tests / 483 assertions across 11 files.
   Owner visual run still to do (checklist in `docs/architecture/ui-integration.md`).
 - **Adjustment (owner request, 2026-10-24):** header-click collapse is now opt-in via
-  `OPENCODE_MODEL_OVERVIEW_HEADER_COLLAPSE` (default off → panel always opens expanded; indicator
+  `OPENCODE_MOSP_HEADER_COLLAPSE` (default off → panel always opens expanded; indicator
   hidden when off; stale persisted `collapsed: true` normalized to expanded on load). The gesture
   itself is kept. `panel-controller` exposes `headerCollapseEnabled` with pure helpers
   `f_resolveHeaderCollapseEnabled` / `f_resolveCollapsedState`; `.envrc`/`.env.example`,
@@ -320,10 +320,10 @@ tunable), schema version, atomic writes in a user cache dir, in-flight dedup, la
   pending.
 
 ### Adjustment 7 — slash command renamed to `/mosp` (owner request, 2026-10-24)
-- The user-facing slash trigger is now **`/mosp`**; the old `/model-overview` name and the `/mo` alias were removed.
+- The user-facing slash trigger is now **`/mosp`**; the old `/mosp` name and the `/mo` alias were removed.
 - Only user-facing strings and the slash registration changed. Unchanged internals: plugin id, host panel name
-  `model-overview`, storage keys `model-overview.*`, command ids `model_overview.*`, palette titles, and the
-  `.opencode/plugins/model-overview/` dev-loader directory.
+  `mosp`, storage keys `mosp.*`, command ids `mosp.*`, palette titles, and the
+  `.opencode/plugins/mosp/` dev-loader directory.
 - Docs updated (`docs/architecture/ui-integration.md` command table, behaviour text, checklist). Historical mentions
   in this plan and the original knowledge doc (`docs/KNOWLEDGE_03.md`) remain as history; `/mosp` supersedes them.
 - Re-verified: `bun run check` green after the rename.
@@ -474,7 +474,7 @@ directed replacing the GPQA + LiveCodeBench pair with a single LLMBM
   `livecodebench`; `matchType` reduced to `exact | alias | family_fallback`.
 - Providers: deleted `src/providers/huggingface-gpqa.ts` and
   `src/providers/livecodebench.ts`; new `src/providers/llbm.ts`;
-  `model-overview.ts` reduced to a single benchmark loader (`loadLlbm`).
+  `mosp.ts` reduced to a single benchmark loader (`loadLlbm`).
 - Mappings: `src/config/llbm-mappings.ts` with per-catalog entries
   `{ opencodeId, llbmId, matchType }`; old `benchmark-mappings.ts` removed.
 - UI: single `LLBM` column (proxy rows prefixed `~`); status/summary wording
@@ -496,7 +496,7 @@ table".
 - Adapter rewritten against `GET /v1/export` (~8.3 MB): metric filtering,
   unit normalization (`points` as-is with 0–100 guard, `ratio` × 100, other
   units skipped with warnings), duplicate rows keep the highest score,
-  deterministic row order, no ad-hoc private cache (the model-overview cache
+  deterministic row order, no ad-hoc private cache (the mosp cache
   envelope owns the 6 h TTL), 30 s timeout floor,
   `OPENCODE_LLM_BENCH_METRIC` override.
 - `scripts/generate-mappings.ts` (`bun run generate:mappings`) regenerates the

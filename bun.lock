@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "opencode_model_overview",
+      "name": "opencode_mosp",
       "dependencies": {
         "@opencode/plugin": "2.1.4",
       },

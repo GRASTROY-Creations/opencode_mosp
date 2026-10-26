@@ -18,7 +18,7 @@ Model       src/services/*  ──►  src/providers/*  ──►  src/domain/* 
 |---|---|---|
 | Entities | `src/domain/model-record.ts`, `model-benchmark.ts`, `model-pricing.ts`, `model-sort.ts`, `source-status.ts`, `guards.ts` | Typed contracts + validation; missing = `null` |
 | Adapters | `src/providers/opencode-models.ts`, `opencode-pricing.ts`, `llbm.ts`, `models-dev.ts`, `adapter-result.ts` | External `unknown` → validated entities |
-| Services | `src/services/model-overview.ts` (aggregation), `model-matching.ts`, `ranking.ts` (sorting), `model-filter.ts`, `cache.ts` | Pure logic + cache I/O; no UI imports |
+| Services | `src/services/mosp.ts` (aggregation), `model-matching.ts`, `ranking.ts` (sorting), `model-filter.ts`, `cache.ts` | Pure logic + cache I/O; no UI imports |
 | Config | `src/config/llbm-mappings.ts` | Reviewed source ↔ registry mapping table |
 | Infra | `src/utils/fetch-json.ts` | Network policy (timeouts, retries, sanitized errors) |
 

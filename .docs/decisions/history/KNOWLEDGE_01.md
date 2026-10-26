@@ -3,8 +3,8 @@
 **1.1. Создание проекта**
 - Создать директорию для проекта:
 ```bash
-mkdir opencode_model_overview
-cd opencode_model_overview
+mkdir opencode_mosp
+cd opencode_mosp
 ```
 - Инициализация проекта с использованием `bun` и `TypeScript`:
 ```bash
@@ -17,7 +17,7 @@ bun add typescript @bun/cli @bun/node
 - Добавить зависимости в `package.json`:
 ```json
 {
-  "name": "opencode_model_overview",
+  "name": "opencode_mosp",
   "version": "0.1.0",
   "license": "MIT",
   "scripts": {
@@ -70,7 +70,7 @@ export default {
 ```
 src/
   plugins/
-    opencode_model_overview/
+    opencode_mosp/
       index.ts
       models.ts
       api.ts
@@ -98,7 +98,7 @@ import { ModelTable } from './components/ModelTable';
 import { SidePanel } from './components/SidePanel';
 
 const plugin = createPlugin({
-  name: 'opencode_model_overview',
+  name: 'opencode_mosp',
   owner: 'GRASTROY Creations',
   version: '0.1.0',
   license: 'MIT',
