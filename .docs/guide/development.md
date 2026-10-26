@@ -1,7 +1,7 @@
 # Development Setup
 
 Project: `opencode_model_overview` · OpenCode plugin · Bun + TypeScript (strict) · TUI UI via SolidJS/OpenTUI.
-Master spec: `docs/KNOWLEDGE_03.md` · consolidated plan: `docs/PLAN.md`.
+Master spec: `.docs/decisions/history/KNOWLEDGE_03.md` · consolidated plan: `.docs/decisions/history/PLAN.md`.
 
 ## Prerequisites
 
@@ -20,10 +20,11 @@ direnv allow   # user action: approves loading .envrc in your shell
 bun install    # creates/validates bun.lock; versions are pinned exactly
 bun run typecheck
 bun run lint
+bun run format:check   # `bun run format` rewrites; Prettier 3, see D-0031
 bun test
 ```
 
-`bun run check` runs all three gates sequentially.
+`bun run check` runs all four gates sequentially (typecheck, lint, format check, tests; four since 2026-10-26, D-0031).
 
 `bun run validate:mappings` (scripts/validate-mappings.ts) re-checks the
 reviewed LLMBM mappings (`src/config/llbm-mappings.ts`) against the live
@@ -78,7 +79,7 @@ Additions required by the real toolchain (strictness was **not** weakened):
 
 ## Loading the plugin during development
 
-`.opencode/plugins/` is the project-local plugin directory, and OpenCode auto-loads it. A project plugin uses the published-package layout: a **directory** containing `index.ts` (server) and `tui.ts` (TUI). This repo has `.opencode/plugins/model-overview/index.ts` (inert server stub) and `.opencode/plugins/model-overview/tui.ts` (re-exports `src/tui.tsx`), so there is exactly one copy of plugin logic. A **flat** `.opencode/plugins/<name>.ts` is treated as a server plugin only and fails if it pulls in TUI/JSX code. Published usage uses the package `./tui` export plus `cli.json` `plugins` (terminal-only) or `opencode.json` `plugins`. Details and the verification checklist: `docs/architecture/ui-integration.md`.
+`.opencode/plugins/` is the project-local plugin directory, and OpenCode auto-loads it. A project plugin uses the published-package layout: a **directory** containing `index.ts` (server) and `tui.ts` (TUI). This repo has `.opencode/plugins/model-overview/index.ts` (inert server stub) and `.opencode/plugins/model-overview/tui.ts` (re-exports `src/tui.tsx`), so there is exactly one copy of plugin logic. A **flat** `.opencode/plugins/<name>.ts` is treated as a server plugin only and fails if it pulls in TUI/JSX code. Published usage uses the package `./tui` export plus `cli.json` `plugins` (terminal-only) or `opencode.json` `plugins`. Details and the verification checklist: `.docs/guide/architecture/ui-integration.md`.
 
 ## CI
 
@@ -88,6 +89,7 @@ Additions required by the real toolchain (strictness was **not** weakened):
 bun install --frozen-lockfile
 bun run typecheck
 bun run lint
+bun run format:check
 bun test
 ```
 

@@ -111,8 +111,7 @@ function fh_normalizeValue(
 
 function fh_compareRows(p_left: ScoredRow, p_right: ScoredRow): number {
   const vl_byBenchmark =
-    k_benchmarkIds.indexOf(p_left.benchmarkId) -
-    k_benchmarkIds.indexOf(p_right.benchmarkId);
+    k_benchmarkIds.indexOf(p_left.benchmarkId) - k_benchmarkIds.indexOf(p_right.benchmarkId);
 
   if (vl_byBenchmark !== 0) {
     return vl_byBenchmark;
@@ -126,9 +125,7 @@ function fh_compareRows(p_left: ScoredRow, p_right: ScoredRow): number {
  * are kept; per model and metric the maximum score wins. Rows are returned
  * sorted by benchmark id, then source model ID, for deterministic caches.
  */
-export function f_parseLlbmExport(
-  p_payload: unknown,
-): AdapterResult<readonly ModelBenchmark[]> {
+export function f_parseLlbmExport(p_payload: unknown): AdapterResult<readonly ModelBenchmark[]> {
   if (!f_isRecord(p_payload)) {
     return f_adapterFail("LLMBM export payload is not an object");
   }
@@ -175,12 +172,7 @@ export function f_parseLlbmExport(
       continue;
     }
 
-    const vl_score = fh_normalizeValue(
-      vl_raw.unit,
-      vl_raw.value,
-      vl_modelId,
-      vl_warnings,
-    );
+    const vl_score = fh_normalizeValue(vl_raw.unit, vl_raw.value, vl_modelId, vl_warnings);
 
     if (vl_score === null) {
       continue;
@@ -210,27 +202,22 @@ export function f_parseLlbmExport(
   }
 
   if (vl_best.size === 0) {
-    return f_adapterFail(
-      "LLMBM returned no score rows for any supported metric",
-      vl_warnings,
-    );
+    return f_adapterFail("LLMBM returned no score rows for any supported metric", vl_warnings);
   }
 
-  const vl_rows: ModelBenchmark[] = [...vl_best.values()]
-    .sort(fh_compareRows)
-    .map((p_entry) => ({
-      benchmarkId: p_entry.benchmarkId,
-      variant: `llbm-${k_llbmMetricByBenchmark[p_entry.benchmarkId]}`,
-      score: p_entry.score,
-      scoreUnit: "percent" as const,
-      sampleCount: null,
-      windowStart: null,
-      windowEnd: null,
-      sourceModelId: p_entry.modelId,
-      matchType: null,
-      sourceUrl: p_entry.sourceUrl,
-      evaluatedAt: p_entry.evaluatedAt,
-    }));
+  const vl_rows: ModelBenchmark[] = [...vl_best.values()].sort(fh_compareRows).map((p_entry) => ({
+    benchmarkId: p_entry.benchmarkId,
+    variant: `llbm-${k_llbmMetricByBenchmark[p_entry.benchmarkId]}`,
+    score: p_entry.score,
+    scoreUnit: "percent" as const,
+    sampleCount: null,
+    windowStart: null,
+    windowEnd: null,
+    sourceModelId: p_entry.modelId,
+    matchType: null,
+    sourceUrl: p_entry.sourceUrl,
+    evaluatedAt: p_entry.evaluatedAt,
+  }));
 
   return f_adapterOk(vl_rows, vl_warnings);
 }
@@ -250,18 +237,12 @@ export async function f_fetchLlbmBenchmarks(
     const vl_payload = await f_fetchJsonWithRetry(k_llbmExportUrl, {
       timeoutMs: Math.max(k_minTimeoutMs, p_options.timeoutMs),
       ...(p_options.signal === undefined ? {} : { signal: p_options.signal }),
-      ...(p_options.fetchImpl === undefined
-        ? {}
-        : { fetchImpl: p_options.fetchImpl }),
-      ...(p_options.maxAttempts === undefined
-        ? {}
-        : { maxAttempts: p_options.maxAttempts }),
+      ...(p_options.fetchImpl === undefined ? {} : { fetchImpl: p_options.fetchImpl }),
+      ...(p_options.maxAttempts === undefined ? {} : { maxAttempts: p_options.maxAttempts }),
     });
 
     return f_parseLlbmExport(vl_payload);
   } catch (p_error) {
-    return f_adapterFail(
-      p_error instanceof Error ? p_error.message : "LLMBM request failed",
-    );
+    return f_adapterFail(p_error instanceof Error ? p_error.message : "LLMBM request failed");
   }
 }

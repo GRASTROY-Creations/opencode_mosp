@@ -5,8 +5,11 @@ available to your OpenCode installation: provider, context window, input/output
 price (USD per 1M tokens), and two LLMBenchmark.ai scores — the Artificial
 Analysis **coding index** and **intelligence index**.
 
-- Version 0.1.0 · MIT · GRASTROY Creations
+- Version 0.1.18 · MIT · Grastroy Creations, Korcakov Roman
 - Target: OpenCode 2.1.4 (`@opencode/plugin` 2.1.4), Bun 1.4.x
+- Documentation: [`.docs/README.md`](.docs/README.md) (goals, guide, decisions, tests, examples)
+- Data licensing for the benchmark scores is unverified — see
+  [`.docs/decisions/D-0029`](.docs/decisions/D-0029-data-source-licensing.md)
 
 ## Data sources
 
@@ -40,7 +43,7 @@ bun install
 bun run check
 ```
 
-`bun run check` runs typecheck, lint, and tests (no network). The mapping
+`bun run check` runs typecheck, lint, format check, and tests (no network). The mapping
 scripts `bun run validate:mappings` and `bun run generate:mappings` need
-network access. See `docs/development.md` for setup and environment variables,
-and `docs/architecture/` plus `docs/api/` for design and source details.
+network access. See `.docs/guide/development.md` for setup and environment variables,
+and `.docs/guide/architecture/` plus `.docs/guide/sources/` for design and source details.

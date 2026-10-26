@@ -1,18 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
 import { f_filterModels } from "../../src/services/model-filter";
-import {
-  f_createTestBenchmark,
-  f_createTestModel,
-} from "./test-models";
+import { f_createTestBenchmark, f_createTestModel } from "./test-models";
 
 const k_scoredModel = f_createTestModel({
   modelId: "llbm-model",
   name: "Scored Model",
   canonicalId: "canonical-llbm",
-  benchmarks: [
-    f_createTestBenchmark("llbmCoding", 80, { sourceModelId: "llbm-model" }),
-  ],
+  benchmarks: [f_createTestBenchmark("llbmCoding", 80, { sourceModelId: "llbm-model" })],
 });
 
 const k_otherProviderModel = f_createTestModel({
@@ -71,11 +66,9 @@ describe("f_filterModels", () => {
   test("shows only explicitly free models", () => {
     const vl_models = [k_scoredModel, k_otherProviderModel, k_missingModel, k_freeModel];
 
-    expect(
-      f_filterModels(vl_models, { freeOnly: true }).map(
-        (p_model) => p_model.modelId,
-      ),
-    ).toEqual(["free-model"]);
+    expect(f_filterModels(vl_models, { freeOnly: true }).map((p_model) => p_model.modelId)).toEqual(
+      ["free-model"],
+    );
   });
 
   test("treats a nonzero tier as not free", () => {

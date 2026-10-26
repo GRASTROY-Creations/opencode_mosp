@@ -6,10 +6,7 @@
  * by the reported score; no ranks are derived (Adjustment 22).
  */
 
-import {
-  f_findBenchmark,
-  type BenchmarkId,
-} from "../domain/model-benchmark";
+import { f_findBenchmark, type BenchmarkId } from "../domain/model-benchmark";
 import type { ModelRecord } from "../domain/model-record";
 import type { ModelSortKey, SortDirection } from "../domain/model-sort";
 
@@ -64,10 +61,7 @@ export function f_sortModels(
   );
 }
 
-function fh_getSortValue(
-  p_model: ModelRecord,
-  p_key: ModelSortKey,
-): string | number | null {
+function fh_getSortValue(p_model: ModelRecord, p_key: ModelSortKey): string | number | null {
   switch (p_key) {
     case "name":
       return p_model.name;
@@ -100,10 +94,7 @@ function fh_getSortValue(
   }
 }
 
-function fh_getBenchmarkScore(
-  p_model: ModelRecord,
-  p_benchmarkId: BenchmarkId,
-): number | null {
+function fh_getBenchmarkScore(p_model: ModelRecord, p_benchmarkId: BenchmarkId): number | null {
   return f_findBenchmark(p_model.benchmarks, p_benchmarkId)?.score ?? null;
 }
 

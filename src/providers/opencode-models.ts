@@ -18,11 +18,7 @@ import {
   f_parseTimestamp,
   type DomainResult,
 } from "../domain/guards";
-import {
-  f_createModelId,
-  f_validateModelRecord,
-  type ModelRecord,
-} from "../domain/model-record";
+import { f_createModelId, f_validateModelRecord, type ModelRecord } from "../domain/model-record";
 import {
   f_adapterFail,
   f_adapterOk,
@@ -48,10 +44,7 @@ export function f_parseOpencodeModels(
   p_payload: unknown,
   p_options: OpencodeModelsParseOptions,
 ): AdapterResult<readonly ModelRecord[]> {
-  const vl_observedAt = f_parseTimestamp(
-    p_options.observedAt,
-    "models.observedAt",
-  );
+  const vl_observedAt = f_parseTimestamp(p_options.observedAt, "models.observedAt");
 
   if (!vl_observedAt.ok) {
     return f_adapterFail(vl_observedAt.error);
@@ -68,19 +61,11 @@ export function f_parseOpencodeModels(
   const vl_seenIds = new Set<string>();
 
   for (const [vl_index, vl_row] of vl_rows.value.entries()) {
-    if (
-      f_isRecord(vl_row) &&
-      vl_row.enabled === false &&
-      p_options.includeDisabled !== true
-    ) {
+    if (f_isRecord(vl_row) && vl_row.enabled === false && p_options.includeDisabled !== true) {
       continue;
     }
 
-    const vl_model = fh_parseOpencodeModel(
-      vl_row,
-      p_options,
-      vl_observedAt.value,
-    );
+    const vl_model = fh_parseOpencodeModel(vl_row, p_options, vl_observedAt.value);
 
     if (!vl_model.ok) {
       vl_warnings.push({
@@ -109,9 +94,7 @@ export function f_parseOpencodeModels(
   return f_adapterOk(vl_models, vl_warnings);
 }
 
-function fh_extractCatalogRows(
-  p_payload: unknown,
-): DomainResult<readonly unknown[]> {
+function fh_extractCatalogRows(p_payload: unknown): DomainResult<readonly unknown[]> {
   if (Array.isArray(p_payload)) {
     return f_ok(p_payload);
   }
@@ -132,10 +115,7 @@ function fh_parseOpencodeModel(
     return f_fail("model must be an object");
   }
 
-  const vl_providerId = f_parseNonEmptyString(
-    p_value.providerID,
-    "model.providerID",
-  );
+  const vl_providerId = f_parseNonEmptyString(p_value.providerID, "model.providerID");
 
   if (!vl_providerId.ok) {
     return vl_providerId;
@@ -166,10 +146,7 @@ function fh_parseOpencodeModel(
     return vl_name;
   }
 
-  const vl_canonicalId = f_parseNullableString(
-    p_value.canonical,
-    "model.canonical",
-  );
+  const vl_canonicalId = f_parseNullableString(p_value.canonical, "model.canonical");
 
   if (!vl_canonicalId.ok) {
     return vl_canonicalId;
@@ -193,10 +170,7 @@ function fh_parseOpencodeModel(
     return vl_pricing;
   }
 
-  const vl_providerName = fh_resolveProviderName(
-    vl_providerId.value,
-    p_options.providerNames,
-  );
+  const vl_providerName = fh_resolveProviderName(vl_providerId.value, p_options.providerNames);
 
   return f_validateModelRecord({
     id: f_createModelId(vl_providerId.value, vl_modelId.value),
@@ -214,9 +188,7 @@ function fh_parseOpencodeModel(
   });
 }
 
-function fh_parseReleaseDate(
-  p_value: unknown,
-): DomainResult<string | null> {
+function fh_parseReleaseDate(p_value: unknown): DomainResult<string | null> {
   if (p_value === null || p_value === undefined) {
     return f_ok(null);
   }
@@ -228,9 +200,7 @@ function fh_parseReleaseDate(
   return f_parseNullableTimestamp(p_value.released, "model.time.released");
 }
 
-function fh_parseContextWindow(
-  p_value: unknown,
-): DomainResult<number | null> {
+function fh_parseContextWindow(p_value: unknown): DomainResult<number | null> {
   if (p_value === null || p_value === undefined) {
     return f_ok(null);
   }

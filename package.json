@@ -1,9 +1,9 @@
 {
   "name": "opencode_model_overview",
-  "version": "0.1.0",
+  "version": "0.1.18",
   "private": true,
   "description": "OpenCode model pricing and benchmark overview",
-  "author": "GRASTROY Creations",
+  "author": "Grastroy Creations, Korcakov Roman",
   "license": "MIT",
   "type": "module",
   "exports": {
@@ -18,7 +18,9 @@
     "test:watch": "bun test --watch",
     "validate:mappings": "bun scripts/validate-mappings.ts",
     "generate:mappings": "bun scripts/generate-mappings.ts",
-    "check": "bun run typecheck && bun run lint && bun run test"
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "bun run typecheck && bun run lint && bun run format:check && bun run test"
   },
   "dependencies": {
     "@opencode/plugin": "2.1.4"
@@ -36,6 +38,8 @@
     "@opentui/solid": "0.6.8",
     "@types/bun": "1.4.4",
     "eslint": "10.13.0",
+    "eslint-config-prettier": "10.1.8",
+    "prettier": "3.9.10",
     "solid-js": "1.9.17",
     "typescript": "6.0.3",
     "typescript-eslint": "8.72.0"

@@ -1,6 +1,6 @@
 # Naming Conventions
 
-Source: `docs/KNOWLEDGE_03.md` §5.1. Applied to all runtime identifiers in this project.
+Source: `.docs/decisions/history/KNOWLEDGE_03.md` §5.1. Applied to all runtime identifiers in this project.
 
 ## Required prefixes
 

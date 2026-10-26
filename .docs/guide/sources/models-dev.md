@@ -49,7 +49,7 @@ benchmark mappings (source ID ↔ family ↔ registry ID).
 
 - Benchmark mappings live in `src/config/llbm-mappings.ts`, rebuilt
   entry-by-entry against the live LLMBM dataset (2026-10-26: 80 of 82 catalog
-  models carry a source ID, 74 with a value; see `docs/api/llmbenchmark.md`).
+  models carry a source ID, 74 with a value; see `.docs/guide/sources/llmbenchmark.md`).
   The models.dev crosswalk is not used by them.
 - KNOWLEDGE_06 candidate IDs checked against models.dev: all five `openai/*`
   model IDs exist (`gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo`, `o1`, `o3-mini`),

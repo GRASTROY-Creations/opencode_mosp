@@ -55,10 +55,7 @@ export function f_parseModelsDevMeta(p_value: unknown): DomainResult<ModelsDevMo
     return vl_family;
   }
 
-  const vl_release = f_parseNullableTimestamp(
-    p_value.release_date,
-    "models.dev.release_date",
-  );
+  const vl_release = f_parseNullableTimestamp(p_value.release_date, "models.dev.release_date");
   if (!vl_release.ok) {
     return vl_release;
   }
@@ -117,10 +114,7 @@ export function f_parseModelsDevCrosswalk(p_payload: unknown): AdapterResult<Mod
   }
 
   if (Object.keys(vl_crosswalk).length === 0) {
-    return f_adapterFail(
-      "models.dev returned no models",
-      vl_warnings,
-    );
+    return f_adapterFail("models.dev returned no models", vl_warnings);
   }
 
   return f_adapterOk(vl_crosswalk, vl_warnings);

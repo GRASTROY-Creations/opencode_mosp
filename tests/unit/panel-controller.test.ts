@@ -40,7 +40,9 @@ import {
 } from "../../src/ui/panel-controller";
 import { f_createTestBenchmark, f_createTestModel } from "./test-models";
 
-function fh_preferences(p_overrides: Partial<OverviewViewPreferences> = {}): OverviewViewPreferences {
+function fh_preferences(
+  p_overrides: Partial<OverviewViewPreferences> = {},
+): OverviewViewPreferences {
   return { ...k_defaultViewPreferences, ...p_overrides };
 }
 
@@ -122,9 +124,7 @@ describe("chip labels", () => {
   });
 
   test("empty table points at the update button only when nothing is loaded", () => {
-    expect(f_buildEmptyMessage(0)).toBe(
-      "No models loaded — click [update] or run /mosp update",
-    );
+    expect(f_buildEmptyMessage(0)).toBe("No models loaded — click [update] or run /mosp update");
     expect(f_buildEmptyMessage(5)).toBe("No models match the current filters");
   });
 });
@@ -140,7 +140,9 @@ describe("sort state", () => {
   });
 
   test("selecting the active column toggles direction", () => {
-    expect(f_nextSortState(fh_preferences({ sortKey: "name", sortDirection: "asc" }), "name")).toEqual({
+    expect(
+      f_nextSortState(fh_preferences({ sortKey: "name", sortDirection: "asc" }), "name"),
+    ).toEqual({
       sortKey: "name",
       sortDirection: "desc",
     });
@@ -177,12 +179,24 @@ describe("command parsing", () => {
 
   test("sort accepts friendly aliases and column keys", () => {
     expect(f_parseOverviewCommand("sort coding")).toEqual({ kind: "sort", key: "codingScore" });
-    expect(f_parseOverviewCommand("sort intel")).toEqual({ kind: "sort", key: "intelligenceScore" });
-    expect(f_parseOverviewCommand("sort Intelligence")).toEqual({ kind: "sort", key: "intelligenceScore" });
+    expect(f_parseOverviewCommand("sort intel")).toEqual({
+      kind: "sort",
+      key: "intelligenceScore",
+    });
+    expect(f_parseOverviewCommand("sort Intelligence")).toEqual({
+      kind: "sort",
+      key: "intelligenceScore",
+    });
     expect(f_parseOverviewCommand("sort input-price")).toEqual({ kind: "sort", key: "inputPrice" });
     expect(f_parseOverviewCommand("sort inputPrice")).toEqual({ kind: "sort", key: "inputPrice" });
-    expect(f_parseOverviewCommand("sort output-price")).toEqual({ kind: "sort", key: "outputPrice" });
-    expect(f_parseOverviewCommand("sort releaseDate")).toEqual({ kind: "sort", key: "releaseDate" });
+    expect(f_parseOverviewCommand("sort output-price")).toEqual({
+      kind: "sort",
+      key: "outputPrice",
+    });
+    expect(f_parseOverviewCommand("sort releaseDate")).toEqual({
+      kind: "sort",
+      key: "releaseDate",
+    });
     expect(f_parseOverviewCommand("sort ctx")).toEqual({ kind: "sort", key: "contextWindow" });
   });
 
@@ -257,11 +271,10 @@ describe("derived rows", () => {
   });
 
   test("free filter requires explicit zero pricing", () => {
-    const vl_rows = f_deriveOverviewRows(
-      vl_models,
-      fh_preferences(),
-      { ...k_defaultFilters, freeOnly: true },
-    );
+    const vl_rows = f_deriveOverviewRows(vl_models, fh_preferences(), {
+      ...k_defaultFilters,
+      freeOnly: true,
+    });
     expect(vl_rows.rows.map((p_model) => p_model.id)).toEqual(["openai/gpt-test"]);
   });
 
@@ -294,9 +307,7 @@ describe("derived rows", () => {
 
 describe("status text", () => {
   test("status line covers missing data, loading, and errors", () => {
-    expect(f_buildStatusLine(undefined, false, null)).toBe(
-      "no cached data — run /mosp update",
-    );
+    expect(f_buildStatusLine(undefined, false, null)).toBe("no cached data — run /mosp update");
     expect(f_buildStatusLine(undefined, true, null)).toBe("refreshing…");
     expect(f_buildStatusLine(fh_createSnapshot([]), false, "boom")).toBe("error: boom");
   });
@@ -336,12 +347,8 @@ describe("status text", () => {
       name: "Claude Test",
       benchmarks: [f_createTestBenchmark("llbmCoding", 80.1)],
     });
-    expect(f_buildSidebarSummary(vl_leader, 16)).toBe(
-      "16 models · top coding Claude Test 80.1",
-    );
-    expect(f_buildSidebarSummary(null, 16)).toBe(
-      "16 models · no LLMBM data",
-    );
+    expect(f_buildSidebarSummary(vl_leader, 16)).toBe("16 models · top coding Claude Test 80.1");
+    expect(f_buildSidebarSummary(null, 16)).toBe("16 models · no LLMBM data");
   });
 
   test("leader is the highest coding score and ignores intelligence-only rows", () => {
@@ -418,9 +425,7 @@ describe("table lines", () => {
 
   test("formats missing values as an em dash", () => {
     const vl_columns: readonly TableColumn[] = [{ key: "contextWindow", width: 6 }];
-    const vl_rows = [
-      f_createTestModel({ id: "c/three", name: "Three", contextWindow: null }),
-    ];
+    const vl_rows = [f_createTestModel({ id: "c/three", name: "Three", contextWindow: null })];
     const vl_lines = f_buildTableLines(vl_rows, vl_columns);
     const vl_line = vl_lines[0] ?? "";
     expect(vl_line.length).toBe(1 + 6);

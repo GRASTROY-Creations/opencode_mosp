@@ -1,13 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-  f_compareModels,
-  f_sortModels,
-} from "../../src/services/ranking";
-import {
-  f_createTestBenchmark,
-  f_createTestModel,
-} from "./test-models";
+import { f_compareModels, f_sortModels } from "../../src/services/ranking";
+import { f_createTestBenchmark, f_createTestModel } from "./test-models";
 
 const k_cheap = f_createTestModel({
   modelId: "cheap",
@@ -30,19 +24,15 @@ const k_unknownPrice = f_createTestModel({
 describe("f_sortModels", () => {
   test("sorts input prices numerically in both directions", () => {
     expect(
-      f_sortModels(
-        [k_expensive, k_cheap, k_unknownPrice],
-        "inputPrice",
-        "asc",
-      ).map((p_model) => p_model.modelId),
+      f_sortModels([k_expensive, k_cheap, k_unknownPrice], "inputPrice", "asc").map(
+        (p_model) => p_model.modelId,
+      ),
     ).toEqual(["cheap", "expensive", "unknown-price"]);
 
     expect(
-      f_sortModels(
-        [k_expensive, k_cheap, k_unknownPrice],
-        "inputPrice",
-        "desc",
-      ).map((p_model) => p_model.modelId),
+      f_sortModels([k_expensive, k_cheap, k_unknownPrice], "inputPrice", "desc").map(
+        (p_model) => p_model.modelId,
+      ),
     ).toEqual(["expensive", "cheap", "unknown-price"]);
   });
 
@@ -62,9 +52,11 @@ describe("f_sortModels", () => {
       f_createTestModel({ modelId: "m1", name: "model 1" }),
     ];
 
-    expect(
-      f_sortModels(vl_models, "name", "asc").map((p_model) => p_model.name),
-    ).toEqual(["model 1", "Model 2", "Model 10"]);
+    expect(f_sortModels(vl_models, "name", "asc").map((p_model) => p_model.name)).toEqual([
+      "model 1",
+      "Model 2",
+      "Model 10",
+    ]);
   });
 
   test("breaks ties deterministically by model ID in both directions", () => {
@@ -75,9 +67,7 @@ describe("f_sortModels", () => {
 
     for (const vl_direction of ["asc", "desc"] as const) {
       expect(
-        f_sortModels(vl_models, "inputPrice", vl_direction).map(
-          (p_model) => p_model.modelId,
-        ),
+        f_sortModels(vl_models, "inputPrice", vl_direction).map((p_model) => p_model.modelId),
       ).toEqual(["a", "b"]);
     }
   });
@@ -99,9 +89,7 @@ describe("f_sortModels", () => {
     });
 
     expect(
-      f_sortModels([vl_thinker, vl_coder], "codingScore", "desc").map(
-        (p_model) => p_model.modelId,
-      ),
+      f_sortModels([vl_thinker, vl_coder], "codingScore", "desc").map((p_model) => p_model.modelId),
     ).toEqual(["coder", "thinker"]);
 
     expect(
@@ -114,26 +102,20 @@ describe("f_sortModels", () => {
   test("keeps missing benchmark scores last in both directions", () => {
     const vl_scored = f_createTestModel({
       modelId: "scored",
-      benchmarks: [
-        f_createTestBenchmark("llbmCoding", 75, { sourceModelId: "scored" }),
-      ],
+      benchmarks: [f_createTestBenchmark("llbmCoding", 75, { sourceModelId: "scored" })],
     });
     // Intelligence-only: missing for the coding column.
     const vl_other = f_createTestModel({
       modelId: "other",
-      benchmarks: [
-        f_createTestBenchmark("llbmIntelligence", 50, { sourceModelId: "other" }),
-      ],
+      benchmarks: [f_createTestBenchmark("llbmIntelligence", 50, { sourceModelId: "other" })],
     });
     const vl_missing = f_createTestModel({ modelId: "missing" });
 
     for (const vl_direction of ["asc", "desc"] as const) {
       expect(
-        f_sortModels(
-          [vl_missing, vl_other, vl_scored],
-          "codingScore",
-          vl_direction,
-        ).map((p_model) => p_model.modelId),
+        f_sortModels([vl_missing, vl_other, vl_scored], "codingScore", vl_direction).map(
+          (p_model) => p_model.modelId,
+        ),
       ).toEqual(["scored", "missing", "other"]);
     }
   });
@@ -150,11 +132,9 @@ describe("f_sortModels", () => {
     const vl_missing = f_createTestModel({ modelId: "missing" });
 
     expect(
-      f_sortModels(
-        [vl_missing, vl_new, vl_old],
-        "releaseDate",
-        "asc",
-      ).map((p_model) => p_model.modelId),
+      f_sortModels([vl_missing, vl_new, vl_old], "releaseDate", "asc").map(
+        (p_model) => p_model.modelId,
+      ),
     ).toEqual(["old", "new", "missing"]);
   });
 

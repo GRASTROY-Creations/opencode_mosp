@@ -15,9 +15,7 @@ function fh_loadFixture(p_name: string): unknown {
   return JSON.parse(readFileSync(vl_path, "utf8")) as unknown;
 }
 
-function fh_expectModels(
-  p_result: AdapterResult<readonly ModelRecord[]>,
-): readonly ModelRecord[] {
+function fh_expectModels(p_result: AdapterResult<readonly ModelRecord[]>): readonly ModelRecord[] {
   if (!p_result.ok) {
     throw new Error(p_result.error);
   }
@@ -25,10 +23,7 @@ function fh_expectModels(
   return p_result.value;
 }
 
-function fh_findModel(
-  p_models: readonly ModelRecord[],
-  p_id: string,
-): ModelRecord {
+function fh_findModel(p_models: readonly ModelRecord[], p_id: string): ModelRecord {
   const vl_model = p_models.find((p_entry) => p_entry.id === p_id);
 
   if (vl_model === undefined) {
@@ -40,29 +35,21 @@ function fh_findModel(
 
 describe("opencode model adapter", () => {
   test("normalizes the verified catalog fixture", () => {
-    const vl_result = f_parseOpencodeModels(
-      fh_loadFixture("model-info.sample.json"),
-      {
-        observedAt: k_observedAt,
-        providerNames: { opencode: "OpenCode" },
-      },
-    );
+    const vl_result = f_parseOpencodeModels(fh_loadFixture("model-info.sample.json"), {
+      observedAt: k_observedAt,
+      providerNames: { opencode: "OpenCode" },
+    });
     const vl_models = fh_expectModels(vl_result);
 
     expect(vl_models).toHaveLength(3);
 
-    const vl_haiku = fh_findModel(
-      vl_models,
-      "opencode/claude-haiku-5-5",
-    );
+    const vl_haiku = fh_findModel(vl_models, "opencode/claude-haiku-5-5");
 
     expect(vl_haiku.name).toBe("Claude Haiku 5.5");
     expect(vl_haiku.providerName).toBe("OpenCode");
     expect(vl_haiku.canonicalId).toBeNull();
     expect(vl_haiku.contextWindow).toBe(1_000_000);
-    expect(vl_haiku.releaseDate).toBe(
-      new Date(1_791_331_200_000).toISOString(),
-    );
+    expect(vl_haiku.releaseDate).toBe(new Date(1_791_331_200_000).toISOString());
     expect(vl_haiku.pricing.inputUsdPerMillionTokens).toBe(0.1);
     expect(vl_haiku.pricing.outputUsdPerMillionTokens).toBe(0.5);
     expect(vl_haiku.pricing.cacheReadUsdPerMillionTokens).toBe(0.01);
@@ -83,10 +70,7 @@ describe("opencode model adapter", () => {
         observedAt: k_observedAt,
       }),
     );
-    const vl_free = fh_findModel(
-      vl_models,
-      "opencode/deepseek-v4.1-flash-free",
-    );
+    const vl_free = fh_findModel(vl_models, "opencode/deepseek-v4.1-flash-free");
     const vl_gpt = fh_findModel(vl_models, "opencode/gpt-5-nano");
 
     expect(f_isFreeModelPricing(vl_free.pricing)).toBe(true);
@@ -137,10 +121,7 @@ describe("opencode model adapter", () => {
       throw new Error("fixture is empty");
     }
 
-    const vl_result = f_parseOpencodeModels(
-      [vl_first, vl_first],
-      { observedAt: k_observedAt },
-    );
+    const vl_result = f_parseOpencodeModels([vl_first, vl_first], { observedAt: k_observedAt });
     const vl_models = fh_expectModels(vl_result);
 
     expect(vl_models).toHaveLength(1);
@@ -172,10 +153,7 @@ describe("opencode model adapter", () => {
       ],
     };
 
-    const vl_result = f_parseOpencodeModels(
-      [vl_invalid, vl_second],
-      { observedAt: k_observedAt },
-    );
+    const vl_result = f_parseOpencodeModels([vl_invalid, vl_second], { observedAt: k_observedAt });
     const vl_models = fh_expectModels(vl_result);
 
     expect(vl_models).toHaveLength(1);
@@ -184,10 +162,7 @@ describe("opencode model adapter", () => {
   });
 
   test("fails a broken envelope instead of inventing an empty catalog", () => {
-    const vl_result = f_parseOpencodeModels(
-      { models: [] },
-      { observedAt: k_observedAt },
-    );
+    const vl_result = f_parseOpencodeModels({ models: [] }, { observedAt: k_observedAt });
 
     expect(vl_result.ok).toBe(false);
 

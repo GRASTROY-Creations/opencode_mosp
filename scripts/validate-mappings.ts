@@ -30,9 +30,7 @@ async function fh_main(): Promise<number> {
   console.log(
     `scored models: coding ${vl_coding.size}, intelligence ${vl_intel.size}; dataset models: ${vl_live.models.size}`,
   );
-  console.log(
-    `catalog: ${vl_catalog === null ? "unavailable" : `ok (${vl_catalog.size} models)`}`,
-  );
+  console.log(`catalog: ${vl_catalog === null ? "unavailable" : `ok (${vl_catalog.size} models)`}`);
 
   const vl_counts = { PASS: 0, PENDING: 0, DRIFT: 0 };
   let vl_codingCount = 0;

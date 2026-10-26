@@ -8,7 +8,7 @@ import { Plugin } from "@opencode/plugin";
  * The interactive UI lives in `src/tui.tsx` (`@opencode/plugin/tui`).
  *
  * Default export is required by the OpenCode plugin loader — the one
- * sanctioned exception to the no-default-export rule (docs/naming-conventions.md).
+ * sanctioned exception to the no-default-export rule (.docs/guide/naming-conventions.md).
  */
 export default Plugin.define({
   id: "opencode_model_overview",

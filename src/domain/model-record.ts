@@ -26,20 +26,13 @@ import {
   type BenchmarkId,
   type ModelBenchmark,
 } from "./model-benchmark";
-import {
-  f_validateModelPricing,
-  type ModelPricing,
-} from "./model-pricing";
+import { f_validateModelPricing, type ModelPricing } from "./model-pricing";
 
 /** Where a record was assembled from. */
 export type ModelSource = "opencode" | "inference" | "merged";
 
 /** Runtime list used by parsers. */
-export const k_modelSources: readonly ModelSource[] = [
-  "opencode",
-  "inference",
-  "merged",
-];
+export const k_modelSources: readonly ModelSource[] = ["opencode", "inference", "merged"];
 
 /** One provider-independent model row rendered by the overview. */
 export interface ModelRecord {
@@ -68,10 +61,7 @@ export interface ModelRecord {
  * Build the stable domain key. Provider and model IDs must already be
  * non-empty and must not contain a slash (they are registry identifiers).
  */
-export function f_createModelId(
-  p_providerId: string,
-  p_modelId: string,
-): string {
+export function f_createModelId(p_providerId: string, p_modelId: string): string {
   return `${p_providerId}/${p_modelId}`;
 }
 
@@ -84,9 +74,7 @@ export function f_getBenchmarkForModel(
 }
 
 /** Validate a normalized model record before it enters a snapshot. */
-export function f_validateModelRecord(
-  p_value: unknown,
-): DomainResult<ModelRecord> {
+export function f_validateModelRecord(p_value: unknown): DomainResult<ModelRecord> {
   if (!f_isRecord(p_value)) {
     return f_fail("model must be an object");
   }
@@ -103,10 +91,7 @@ export function f_validateModelRecord(
     return vl_modelId;
   }
 
-  const vl_canonicalId = f_parseNullableString(
-    p_value.canonicalId,
-    "model.canonicalId",
-  );
+  const vl_canonicalId = f_parseNullableString(p_value.canonicalId, "model.canonicalId");
 
   if (!vl_canonicalId.ok) {
     return vl_canonicalId;
@@ -118,19 +103,13 @@ export function f_validateModelRecord(
     return vl_name;
   }
 
-  const vl_providerId = f_parseNonEmptyString(
-    p_value.providerId,
-    "model.providerId",
-  );
+  const vl_providerId = f_parseNonEmptyString(p_value.providerId, "model.providerId");
 
   if (!vl_providerId.ok) {
     return vl_providerId;
   }
 
-  const vl_providerName = f_parseNonEmptyString(
-    p_value.providerName,
-    "model.providerName",
-  );
+  const vl_providerName = f_parseNonEmptyString(p_value.providerName, "model.providerName");
 
   if (!vl_providerName.ok) {
     return vl_providerName;
@@ -139,15 +118,10 @@ export function f_validateModelRecord(
   // `id` is the documented stable key, not an arbitrary label. Mismatches
   // would make matching and cache keys disagree.
   if (vl_id.value !== f_createModelId(vl_providerId.value, vl_modelId.value)) {
-    return f_fail(
-      "model.id must equal <providerId>/<modelId>",
-    );
+    return f_fail("model.id must equal <providerId>/<modelId>");
   }
 
-  const vl_releaseDate = f_parseNullableTimestamp(
-    p_value.releaseDate,
-    "model.releaseDate",
-  );
+  const vl_releaseDate = f_parseNullableTimestamp(p_value.releaseDate, "model.releaseDate");
 
   if (!vl_releaseDate.ok) {
     return vl_releaseDate;
@@ -174,20 +148,13 @@ export function f_validateModelRecord(
     return vl_benchmarks;
   }
 
-  const vl_source = f_parseEnum(
-    p_value.source,
-    k_modelSources,
-    "model.source",
-  );
+  const vl_source = f_parseEnum(p_value.source, k_modelSources, "model.source");
 
   if (!vl_source.ok) {
     return vl_source;
   }
 
-  const vl_lastUpdatedAt = f_parseTimestamp(
-    p_value.lastUpdatedAt,
-    "model.lastUpdatedAt",
-  );
+  const vl_lastUpdatedAt = f_parseTimestamp(p_value.lastUpdatedAt, "model.lastUpdatedAt");
 
   if (!vl_lastUpdatedAt.ok) {
     return vl_lastUpdatedAt;
@@ -209,9 +176,7 @@ export function f_validateModelRecord(
   });
 }
 
-function fh_validateBenchmarks(
-  p_value: unknown,
-): DomainResult<readonly ModelBenchmark[]> {
+function fh_validateBenchmarks(p_value: unknown): DomainResult<readonly ModelBenchmark[]> {
   if (!Array.isArray(p_value)) {
     return f_fail("model.benchmarks must be an array");
   }

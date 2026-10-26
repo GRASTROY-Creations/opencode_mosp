@@ -34,10 +34,7 @@ import {
 export type BenchmarkId = "llbmCoding" | "llbmIntelligence";
 
 /** Runtime list in display order; used by parsers, sorting, and the UI. */
-export const k_benchmarkIds: readonly BenchmarkId[] = [
-  "llbmCoding",
-  "llbmIntelligence",
-];
+export const k_benchmarkIds: readonly BenchmarkId[] = ["llbmCoding", "llbmIntelligence"];
 
 /** LLMBM export metric backing each benchmark id. */
 export const k_llbmMetricByBenchmark: Readonly<Record<BenchmarkId, string>> = {
@@ -54,10 +51,7 @@ export const k_llbmMetricByBenchmark: Readonly<Record<BenchmarkId, string>> = {
  */
 export type BenchmarkMatchType = "exact" | "family_fallback";
 
-export const k_benchmarkMatchTypes: readonly BenchmarkMatchType[] = [
-  "exact",
-  "family_fallback",
-];
+export const k_benchmarkMatchTypes: readonly BenchmarkMatchType[] = ["exact", "family_fallback"];
 
 function fh_parseNullableMatchType(
   p_value: unknown,
@@ -104,35 +98,24 @@ export function f_findBenchmark(
   p_benchmarks: readonly ModelBenchmark[],
   p_benchmarkId: BenchmarkId,
 ): ModelBenchmark | null {
-  const vl_match = p_benchmarks.find(
-    (p_entry) => p_entry.benchmarkId === p_benchmarkId,
-  );
+  const vl_match = p_benchmarks.find((p_entry) => p_entry.benchmarkId === p_benchmarkId);
 
   return vl_match ?? null;
 }
 
 /** Validate a normalized benchmark record produced by an adapter. */
-export function f_validateModelBenchmark(
-  p_value: unknown,
-): DomainResult<ModelBenchmark> {
+export function f_validateModelBenchmark(p_value: unknown): DomainResult<ModelBenchmark> {
   if (!f_isRecord(p_value)) {
     return f_fail("benchmark must be an object");
   }
 
-  const vl_benchmarkId = f_parseEnum(
-    p_value.benchmarkId,
-    k_benchmarkIds,
-    "benchmark.benchmarkId",
-  );
+  const vl_benchmarkId = f_parseEnum(p_value.benchmarkId, k_benchmarkIds, "benchmark.benchmarkId");
 
   if (!vl_benchmarkId.ok) {
     return vl_benchmarkId;
   }
 
-  const vl_variant = f_parseNonEmptyString(
-    p_value.variant,
-    "benchmark.variant",
-  );
+  const vl_variant = f_parseNonEmptyString(p_value.variant, "benchmark.variant");
 
   if (!vl_variant.ok) {
     return vl_variant;
@@ -157,19 +140,13 @@ export function f_validateModelBenchmark(
     return vl_sampleCount;
   }
 
-  const vl_windowStart = f_parseNullableTimestamp(
-    p_value.windowStart,
-    "benchmark.windowStart",
-  );
+  const vl_windowStart = f_parseNullableTimestamp(p_value.windowStart, "benchmark.windowStart");
 
   if (!vl_windowStart.ok) {
     return vl_windowStart;
   }
 
-  const vl_windowEnd = f_parseNullableTimestamp(
-    p_value.windowEnd,
-    "benchmark.windowEnd",
-  );
+  const vl_windowEnd = f_parseNullableTimestamp(p_value.windowEnd, "benchmark.windowEnd");
 
   if (!vl_windowEnd.ok) {
     return vl_windowEnd;
@@ -183,10 +160,7 @@ export function f_validateModelBenchmark(
     return f_fail("benchmark.windowStart must not be after windowEnd");
   }
 
-  const vl_sourceModelId = f_parseNullableString(
-    p_value.sourceModelId,
-    "benchmark.sourceModelId",
-  );
+  const vl_sourceModelId = f_parseNullableString(p_value.sourceModelId, "benchmark.sourceModelId");
 
   if (!vl_sourceModelId.ok) {
     return vl_sourceModelId;
@@ -198,19 +172,13 @@ export function f_validateModelBenchmark(
     return vl_matchType;
   }
 
-  const vl_sourceUrl = f_parseNullableHttpUrl(
-    p_value.sourceUrl,
-    "benchmark.sourceUrl",
-  );
+  const vl_sourceUrl = f_parseNullableHttpUrl(p_value.sourceUrl, "benchmark.sourceUrl");
 
   if (!vl_sourceUrl.ok) {
     return vl_sourceUrl;
   }
 
-  const vl_evaluatedAt = f_parseNullableTimestamp(
-    p_value.evaluatedAt,
-    "benchmark.evaluatedAt",
-  );
+  const vl_evaluatedAt = f_parseNullableTimestamp(p_value.evaluatedAt, "benchmark.evaluatedAt");
 
   if (!vl_evaluatedAt.ok) {
     return vl_evaluatedAt;
@@ -231,10 +199,7 @@ export function f_validateModelBenchmark(
   });
 }
 
-function fh_parseNullableScore(
-  p_value: unknown,
-  p_field: string,
-): DomainResult<number | null> {
+function fh_parseNullableScore(p_value: unknown, p_field: string): DomainResult<number | null> {
   const vl_number = f_parseNullableNonNegativeNumber(p_value, p_field);
 
   if (!vl_number.ok) {

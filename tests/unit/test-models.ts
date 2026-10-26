@@ -9,9 +9,7 @@ import {
   type BenchmarkId,
   type ModelBenchmark,
 } from "../../src/domain/model-benchmark";
-import type {
-  ModelPricingTier,
-} from "../../src/domain/model-pricing";
+import type { ModelPricingTier } from "../../src/domain/model-pricing";
 import type { ModelRecord, ModelSource } from "../../src/domain/model-record";
 
 export interface TestModelOptions {
@@ -30,9 +28,7 @@ export interface TestModelOptions {
   readonly source?: ModelSource;
 }
 
-export function f_createTestModel(
-  p_options: TestModelOptions = {},
-): ModelRecord {
+export function f_createTestModel(p_options: TestModelOptions = {}): ModelRecord {
   const vl_providerId = p_options.providerId ?? "test";
   const vl_modelId = p_options.modelId ?? "model-a";
 

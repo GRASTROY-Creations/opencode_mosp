@@ -60,20 +60,14 @@ describe("f_createMemoryCache", () => {
 
     await vl_cache.write("llbm", k_payload, k_now, k_ttlMs);
 
-    const vl_atBoundary = await vl_cache.read(
-      "llbm",
-      new Date(k_now.getTime() + k_ttlMs),
-    );
+    const vl_atBoundary = await vl_cache.read("llbm", new Date(k_now.getTime() + k_ttlMs));
     expect(vl_atBoundary.ok).toBe(true);
 
     if (vl_atBoundary.ok) {
       expect(vl_atBoundary.value.fresh).toBe(true);
     }
 
-    const vl_afterBoundary = await vl_cache.read(
-      "llbm",
-      new Date(k_now.getTime() + k_ttlMs + 1),
-    );
+    const vl_afterBoundary = await vl_cache.read("llbm", new Date(k_now.getTime() + k_ttlMs + 1));
     expect(vl_afterBoundary.ok).toBe(true);
 
     if (vl_afterBoundary.ok) {
@@ -85,17 +79,20 @@ describe("f_createMemoryCache", () => {
     const vl_cache = f_createMemoryCache();
     const vl_invalidSource = "not-a-source" as SourceId;
 
-    expect(
-      await vl_cache.write(vl_invalidSource, k_payload, k_now, k_ttlMs),
-    ).toEqual({ ok: false, error: "cache source is invalid" });
+    expect(await vl_cache.write(vl_invalidSource, k_payload, k_now, k_ttlMs)).toEqual({
+      ok: false,
+      error: "cache source is invalid",
+    });
 
-    expect(
-      await vl_cache.write("llbm", k_payload, k_now, -1),
-    ).toEqual({ ok: false, error: "cache TTL is invalid" });
+    expect(await vl_cache.write("llbm", k_payload, k_now, -1)).toEqual({
+      ok: false,
+      error: "cache TTL is invalid",
+    });
 
-    expect(
-      await vl_cache.write("llbm", k_payload, k_now, Number.NaN),
-    ).toEqual({ ok: false, error: "cache TTL is invalid" });
+    expect(await vl_cache.write("llbm", k_payload, k_now, Number.NaN)).toEqual({
+      ok: false,
+      error: "cache TTL is invalid",
+    });
   });
 });
 
@@ -112,12 +109,7 @@ describe("f_createFileCache", () => {
         reason: "missing",
       });
 
-      const vl_write = await vl_cache.write(
-        "llbm",
-        k_payload,
-        k_now,
-        k_ttlMs,
-      );
+      const vl_write = await vl_cache.write("llbm", k_payload, k_now, k_ttlMs);
       expect(vl_write).toEqual({ ok: true });
 
       const vl_read = await vl_cache.read("llbm", k_now);
@@ -132,9 +124,7 @@ describe("f_createFileCache", () => {
 
       const vl_entries = await readdir(vl_directory);
       expect(vl_entries).toContain("llbm.json");
-      expect(vl_entries.some((p_entry) => p_entry.endsWith(".tmp"))).toBe(
-        false,
-      );
+      expect(vl_entries.some((p_entry) => p_entry.endsWith(".tmp"))).toBe(false);
     } finally {
       await rm(vl_directory, { recursive: true, force: true });
     }
@@ -147,17 +137,9 @@ describe("f_createFileCache", () => {
       const vl_cache = f_createFileCache(vl_directory);
 
       await vl_cache.write("llbm", [{ version: 1 }], k_now, k_ttlMs);
-      await vl_cache.write(
-        "llbm",
-        [{ version: 2 }],
-        new Date(k_now.getTime() + 1_000),
-        k_ttlMs,
-      );
+      await vl_cache.write("llbm", [{ version: 2 }], new Date(k_now.getTime() + 1_000), k_ttlMs);
 
-      const vl_read = await vl_cache.read(
-        "llbm",
-        new Date(k_now.getTime() + 2_000),
-      );
+      const vl_read = await vl_cache.read("llbm", new Date(k_now.getTime() + 2_000));
 
       if (!vl_read.ok) {
         throw new Error("expected a cached entry");

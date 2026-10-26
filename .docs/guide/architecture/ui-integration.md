@@ -154,7 +154,7 @@ Keys used by the panel (preferences are never mixed with cached data):
 
 A stored shape from an older version is normalized once back to defaults at
 startup. Benchmark/model data lives only in the file cache
-(`docs/architecture/caching.md`).
+(`.docs/guide/architecture/caching.md`).
 
 ## Mouse and rendering
 

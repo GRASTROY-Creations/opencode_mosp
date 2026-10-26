@@ -17,10 +17,7 @@
  * benchmark id, so one source model can feed both LLMBM columns.
  */
 
-import {
-  k_llbmMappings,
-  type LlbmMapping,
-} from "../config/llbm-mappings";
+import { k_llbmMappings, type LlbmMapping } from "../config/llbm-mappings";
 import {
   k_benchmarkIds,
   type BenchmarkId,
@@ -31,19 +28,11 @@ import type { ModelRecord } from "../domain/model-record";
 
 /** Strategy that resolved a benchmark row to a model. */
 export type MatchStrategy =
-  | "exact-id"
-  | "exact-model-id"
-  | "canonical-id"
-  | "mapping"
-  | "normalized";
+  "exact-id" | "exact-model-id" | "canonical-id" | "mapping" | "normalized";
 
 /** Why a benchmark row could not be attached to a model. */
 export type MatchFailureReason =
-  | "missing-source-id"
-  | "no-match"
-  | "ambiguous"
-  | "mapping-target-missing"
-  | "duplicate-benchmark";
+  "missing-source-id" | "no-match" | "ambiguous" | "mapping-target-missing" | "duplicate-benchmark";
 
 /** A benchmark row successfully attached during this match run. */
 export interface BenchmarkMatch {
@@ -136,10 +125,7 @@ export function f_matchBenchmarkRecords(
   const vl_matches: BenchmarkMatch[] = [];
   const vl_unmatched: UnmatchedBenchmark[] = [];
 
-  const fh_reject = (
-    p_benchmark: ModelBenchmark,
-    p_reason: MatchFailureReason,
-  ): void => {
+  const fh_reject = (p_benchmark: ModelBenchmark, p_reason: MatchFailureReason): void => {
     vl_unmatched.push({
       benchmarkId: p_benchmark.benchmarkId,
       sourceModelId: p_benchmark.sourceModelId,
@@ -259,9 +245,10 @@ export function f_matchBenchmarkRecords(
 }
 
 function fh_resolve(p_index: _Index, p_key: string): _Resolution {
-  const vl_models = p_index.get(p_key);
+  const vl_models = p_index.get(p_key) ?? [];
+  const vl_model = vl_models[0];
 
-  if (vl_models === undefined || vl_models.length === 0) {
+  if (vl_model === undefined) {
     return { kind: "none" };
   }
 
@@ -269,7 +256,7 @@ function fh_resolve(p_index: _Index, p_key: string): _Resolution {
     return { kind: "ambiguous" };
   }
 
-  return { kind: "match", model: vl_models[0]! };
+  return { kind: "match", model: vl_model };
 }
 
 /**
@@ -327,15 +314,10 @@ function fh_lookupMapping(
   p_index: _MappingIndex,
   p_sourceModelId: string,
 ): readonly _MappedTarget[] | undefined {
-  return (
-    p_index.exact.get(p_sourceModelId) ??
-    p_index.folded.get(p_sourceModelId.toLowerCase())
-  );
+  return p_index.exact.get(p_sourceModelId) ?? p_index.folded.get(p_sourceModelId.toLowerCase());
 }
 
-function fh_sortBenchmarks(
-  p_benchmarks: readonly ModelBenchmark[],
-): readonly ModelBenchmark[] {
+function fh_sortBenchmarks(p_benchmarks: readonly ModelBenchmark[]): readonly ModelBenchmark[] {
   return [...p_benchmarks].sort(
     (p_left, p_right) =>
       (k_benchmarkOrder.get(p_left.benchmarkId) ?? 0) -
@@ -356,11 +338,7 @@ function fh_indexModels(p_models: readonly ModelRecord[]): _ModelIndex {
 
     if (vl_model.canonicalId !== null) {
       fh_addToIndex(vl_byCanonicalId, vl_model.canonicalId, vl_model);
-      fh_addToIndex(
-        vl_byNormalizedId,
-        f_normalizeModelId(vl_model.canonicalId),
-        vl_model,
-      );
+      fh_addToIndex(vl_byNormalizedId, f_normalizeModelId(vl_model.canonicalId), vl_model);
     }
   }
 

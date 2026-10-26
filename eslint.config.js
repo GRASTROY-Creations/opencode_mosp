@@ -1,18 +1,12 @@
 import js from "@eslint/js";
+import prettierConfig from "eslint-config-prettier";
 import tseslint from "typescript-eslint";
 
 // Flat ESLint configuration (ESLint 10 / typescript-eslint 8).
-// See docs/naming-conventions.md for the prefix rules and their exceptions.
+// See .docs/guide/naming-conventions.md for the prefix rules and their exceptions.
 export default tseslint.config(
   {
-    ignores: [
-      "node_modules/**",
-      "dist/**",
-      "coverage/**",
-      ".direnv/**",
-      ".cache/**",
-      "bun.lock",
-    ],
+    ignores: ["node_modules/**", "dist/**", "coverage/**", ".direnv/**", ".cache/**", "bun.lock"],
   },
 
   js.configs.recommended,
@@ -52,6 +46,31 @@ export default tseslint.config(
       // Floating async calls (e.g. fire-and-forget refresh) must be explicitly `void`-handled.
       "@typescript-eslint/no-floating-promises": "error",
 
+      // Restricted language subset (Coding Standard 12, decision D-0031):
+      // no dynamic code evaluation, no script URLs, strict equality, no
+      // parameter mutation, and no `!` assertions that silence null checks.
+      "no-eval": "error",
+      "no-implied-eval": "off",
+      "@typescript-eslint/no-implied-eval": "error",
+      "no-new-func": "error",
+      "no-script-url": "error",
+      eqeqeq: ["error", "always"],
+      "no-param-reassign": ["error", { props: false }],
+      "@typescript-eslint/no-non-null-assertion": "error",
+
+      // Explicit return types (Coding Standard 14, D-0031). Inline callbacks and
+      // functions whose type is fixed by context are exempt.
+      "@typescript-eslint/explicit-function-return-type": [
+        "error",
+        {
+          allowExpressions: true,
+          allowTypedFunctionExpressions: true,
+          allowHigherOrderFunctions: true,
+          allowDirectConstAssertionInArrowFunctions: true,
+        },
+      ],
+      "@typescript-eslint/explicit-module-boundary-types": "error",
+
       // Naming convention, enforced where practical (spec §13):
       // module-scope function-like bindings must be f_/fh_ (runtime/helper functions)
       // or PascalCase (Solid components / JSX, an imposed exception per OpenCode docs).
@@ -61,21 +80,24 @@ export default tseslint.config(
           selector:
             "Program > VariableDeclaration > VariableDeclarator:not([id.name=/^(f_|fh_|[A-Z])/])[init.type='ArrowFunctionExpression'], Program > ExportNamedDeclaration > VariableDeclaration > VariableDeclarator:not([id.name=/^(f_|fh_|[A-Z])/])[init.type='ArrowFunctionExpression']",
           message:
-            "Module-scope function bindings must use the f_ or fh_ prefix (PascalCase is allowed only for Solid/JSX components). See docs/naming-conventions.md.",
+            "Module-scope function bindings must use the f_ or fh_ prefix (PascalCase is allowed only for Solid/JSX components). See .docs/guide/naming-conventions.md.",
         },
         {
           selector:
             "Program > VariableDeclaration > VariableDeclarator:not([id.name=/^(f_|fh_|[A-Z])/])[init.type='FunctionExpression'], Program > ExportNamedDeclaration > VariableDeclaration > VariableDeclarator:not([id.name=/^(f_|fh_|[A-Z])/])[init.type='FunctionExpression']",
           message:
-            "Module-scope function bindings must use the f_ or fh_ prefix (PascalCase is allowed only for Solid/JSX components). See docs/naming-conventions.md.",
+            "Module-scope function bindings must use the f_ or fh_ prefix (PascalCase is allowed only for Solid/JSX components). See .docs/guide/naming-conventions.md.",
         },
         {
-          selector:
-            "FunctionDeclaration:not([id.name=/^(f_|fh_|[A-Z])/])",
+          selector: "FunctionDeclaration:not([id.name=/^(f_|fh_|[A-Z])/])",
           message:
-            "Function declarations must use the f_ or fh_ prefix (PascalCase is allowed only for Solid/JSX components). See docs/naming-conventions.md.",
+            "Function declarations must use the f_ or fh_ prefix (PascalCase is allowed only for Solid/JSX components). See .docs/guide/naming-conventions.md.",
         },
       ],
     },
   },
+
+  // Must stay last: turns off stylistic rules that would conflict with Prettier,
+  // which owns formatting (`bun run format`, D-0031).
+  prettierConfig,
 );

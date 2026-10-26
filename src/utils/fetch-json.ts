@@ -11,19 +11,10 @@
 
 /** Machine-readable failure category for callers that isolate sources. */
 export type FetchJsonErrorKind =
-  | "http"
-  | "network"
-  | "timeout"
-  | "aborted"
-  | "parse"
-  | "invalid-url"
-  | "invalid-options";
+  "http" | "network" | "timeout" | "aborted" | "parse" | "invalid-url" | "invalid-options";
 
 /** Minimal fetch seam so tests never touch the network. */
-export type FetchLike = (
-  p_input: string,
-  p_init?: RequestInit,
-) => Promise<Response>;
+export type FetchLike = (p_input: string, p_init?: RequestInit) => Promise<Response>;
 
 /** Injectable sleep seam for retry tests. */
 export type SleepLike = (p_ms: number) => Promise<void>;
@@ -76,10 +67,7 @@ const k_maxBackoffMs = 10_000;
  * Perform one JSON GET request with a timeout. The generic parameter is only a
  * convenience: the returned value is still untrusted and must be validated.
  */
-export async function f_fetchJson<T>(
-  p_url: string,
-  p_options: FetchJsonOptions,
-): Promise<T> {
+export async function f_fetchJson<T>(p_url: string, p_options: FetchJsonOptions): Promise<T> {
   const vl_target = fh_parseRequestUrl(p_url);
   const vl_timeoutMs = fh_parseTimeout(p_options.timeoutMs);
   const vl_controller = new AbortController();
@@ -128,26 +116,18 @@ export async function f_fetchJson<T>(
       }
 
       if (vl_externalSignal?.aborted === true) {
-        throw new FetchJsonError(
-          "aborted",
-          `Request to ${vl_target.host} was aborted`,
-        );
+        throw new FetchJsonError("aborted", `Request to ${vl_target.host} was aborted`);
       }
 
       if (p_error instanceof FetchJsonError) {
         throw p_error;
       }
 
-      throw new FetchJsonError(
-        "network",
-        `Network error while fetching ${vl_target.host}`,
-      );
+      throw new FetchJsonError("network", `Network error while fetching ${vl_target.host}`);
     }
 
     if (!vl_response.ok) {
-      const vl_retryAfterMs = fh_parseRetryAfter(
-        vl_response.headers.get("retry-after"),
-      );
+      const vl_retryAfterMs = fh_parseRetryAfter(vl_response.headers.get("retry-after"));
 
       throw new FetchJsonError(
         "http",
@@ -167,11 +147,7 @@ export async function f_fetchJson<T>(
         );
       }
 
-      throw new FetchJsonError(
-        "parse",
-        `Invalid JSON from ${vl_target.host}`,
-        vl_response.status,
-      );
+      throw new FetchJsonError("parse", `Invalid JSON from ${vl_target.host}`, vl_response.status);
     }
   } finally {
     clearTimeout(vl_timer);
@@ -208,14 +184,8 @@ export async function f_fetchJsonWithRetry<T>(
         throw p_error;
       }
 
-      const vl_backoffMs = Math.min(
-        vl_baseDelayMs * 2 ** (vl_attempt - 1),
-        k_maxBackoffMs,
-      );
-      const vl_delayMs = Math.min(
-        p_error.retryAfterMs ?? vl_backoffMs,
-        k_maxRetryAfterMs,
-      );
+      const vl_backoffMs = Math.min(vl_baseDelayMs * 2 ** (vl_attempt - 1), k_maxBackoffMs);
+      const vl_delayMs = Math.min(p_error.retryAfterMs ?? vl_backoffMs, k_maxRetryAfterMs);
 
       await vl_sleep(vl_delayMs);
       vl_attempt += 1;
@@ -245,10 +215,7 @@ function fh_parseRequestUrl(p_url: string): RequestTarget {
 
 function fh_parseTimeout(p_timeoutMs: number): number {
   if (!Number.isFinite(p_timeoutMs) || p_timeoutMs <= 0) {
-    throw new FetchJsonError(
-      "invalid-options",
-      "timeoutMs must be a positive number",
-    );
+    throw new FetchJsonError("invalid-options", "timeoutMs must be a positive number");
   }
 
   return p_timeoutMs;
@@ -256,10 +223,7 @@ function fh_parseTimeout(p_timeoutMs: number): number {
 
 function fh_parseMaxAttempts(p_maxAttempts: number): number {
   if (!Number.isInteger(p_maxAttempts) || p_maxAttempts < 1) {
-    throw new FetchJsonError(
-      "invalid-options",
-      "maxAttempts must be a positive integer",
-    );
+    throw new FetchJsonError("invalid-options", "maxAttempts must be a positive integer");
   }
 
   return p_maxAttempts;
@@ -267,10 +231,7 @@ function fh_parseMaxAttempts(p_maxAttempts: number): number {
 
 function fh_parseBaseDelay(p_baseDelayMs: number): number {
   if (!Number.isFinite(p_baseDelayMs) || p_baseDelayMs < 0) {
-    throw new FetchJsonError(
-      "invalid-options",
-      "baseDelayMs must be a non-negative number",
-    );
+    throw new FetchJsonError("invalid-options", "baseDelayMs must be a non-negative number");
   }
 
   return p_baseDelayMs;

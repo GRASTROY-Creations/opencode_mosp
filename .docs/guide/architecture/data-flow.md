@@ -71,7 +71,7 @@ model feeds both LLMBM columns), in this order:
   the model's own score.
 - Mapping coverage (2026-10-26): 82 entries, 80 with a source id — 74 carry a
   value (coding 47, intelligence 74), 6 PENDING, 2 `null`. Details and the
-  generation policy: `docs/api/llmbenchmark.md`.
+  generation policy: `.docs/guide/sources/llmbenchmark.md`.
 - `bun run validate:mappings` re-fetches the live export (plus the location
   catalog unless `--skip-catalog`) and classifies every non-null `llbmId` as
   **PASS** (scored in at least one metric), **PENDING** (real model, no score
@@ -114,9 +114,9 @@ includes query strings, headers, or credentials in errors.
 - `f_mergeModelSources` fills null metadata, merges pricing tiers by threshold,
   and unions benchmarks by ID without inventing values.
 - Status derivation and storage rules are documented in
-  `docs/architecture/caching.md`.
+  `.docs/guide/architecture/caching.md`.
 
 ## History
 
 Phase-by-phase history (GPQA/LiveCodeBench era, LLMBM migration, mapping
-rebuilds) is recorded in `docs/PLAN.md` (Adjustments 16–22).
+rebuilds) is recorded in `.docs/decisions/history/PLAN.md` (Adjustments 16–22).

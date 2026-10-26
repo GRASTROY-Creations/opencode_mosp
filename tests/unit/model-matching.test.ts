@@ -1,14 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
 import type { LlbmMapping } from "../../src/config/llbm-mappings";
-import {
-  f_matchBenchmarkRecords,
-  f_normalizeModelId,
-} from "../../src/services/model-matching";
-import {
-  f_createTestBenchmark,
-  f_createTestModel,
-} from "./test-models";
+import { f_matchBenchmarkRecords, f_normalizeModelId } from "../../src/services/model-matching";
+import { f_createTestBenchmark, f_createTestModel } from "./test-models";
 
 describe("f_normalizeModelId", () => {
   test("trims, lowercases, and converts underscores only", () => {
@@ -125,14 +119,11 @@ describe("f_matchBenchmarkRecords", () => {
 
   test("does not mutate the input catalog", () => {
     const vl_models = [f_createTestModel()];
-    const vl_result = f_matchBenchmarkRecords(
-      vl_models,
-      [
-        f_createTestBenchmark("llbmCoding", 70, {
-          sourceModelId: "test/model-a",
-        }),
-      ],
-    );
+    const vl_result = f_matchBenchmarkRecords(vl_models, [
+      f_createTestBenchmark("llbmCoding", 70, {
+        sourceModelId: "test/model-a",
+      }),
+    ]);
 
     expect(vl_result.models).not.toBe(vl_models);
     expect(vl_models[0]?.benchmarks).toEqual([]);
@@ -215,7 +206,11 @@ describe("reviewed LLMBM mappings", () => {
       sourceModelId: "MODEL_A",
     });
 
-    const vl_result = f_matchBenchmarkRecords([vl_model], [vl_benchmark], [{ ...k_mapping, llbmId: "MODEL_A", matchType: "family_fallback" }]);
+    const vl_result = f_matchBenchmarkRecords(
+      [vl_model],
+      [vl_benchmark],
+      [{ ...k_mapping, llbmId: "MODEL_A", matchType: "family_fallback" }],
+    );
 
     expect(vl_result.matches[0]?.strategy).toBe("mapping");
     expect(vl_result.matches[0]?.matchType).toBe("family_fallback");
@@ -299,10 +294,7 @@ describe("casefolded mapping lookup", () => {
     ];
 
     const vl_result = f_matchBenchmarkRecords(
-      [
-        f_createTestModel({ id: "test/model-a" }),
-        f_createTestModel({ id: "test/model-b" }),
-      ],
+      [f_createTestModel({ id: "test/model-a" }), f_createTestModel({ id: "test/model-b" })],
       [f_createTestBenchmark("llbmCoding", 90, { sourceModelId: "Dup" })],
       vl_mappings,
     );
@@ -363,33 +355,25 @@ describe("seeded production mappings (defaults)", () => {
     const vl_result = f_matchBenchmarkRecords(vl_models, vl_benchmarks);
 
     expect(vl_result.matches).toHaveLength(5);
-    expect(
-      vl_result.matches.every((p_match) => p_match.strategy === "mapping"),
-    ).toBe(true);
+    expect(vl_result.matches.every((p_match) => p_match.strategy === "mapping")).toBe(true);
 
     const vl_nemotron = vl_result.models.find(
       (p_model) => p_model.id === "opencode/nemotron-3.5-lightning-free",
     );
     expect(vl_nemotron?.benchmarks[0]?.matchType).toBe("family_fallback");
 
-    const vl_kimi = vl_result.models.find(
-      (p_model) => p_model.id === "opencode/kimi-k2.6",
-    );
+    const vl_kimi = vl_result.models.find((p_model) => p_model.id === "opencode/kimi-k2.6");
     expect(vl_kimi?.benchmarks[0]?.matchType).toBe("exact");
 
     // The shared `z-ai/glm-5.3-flash` source id attaches to both reviewed
     // targets (Adjustment 21 sharing): the paid model owns the row and the
     // `-free` sibling receives a clone marked family_fallback (rendered ~).
-    const vl_glmPaid = vl_result.models.find(
-      (p_model) => p_model.id === "opencode/glm-5.3-flash",
-    );
+    const vl_glmPaid = vl_result.models.find((p_model) => p_model.id === "opencode/glm-5.3-flash");
     expect(vl_glmPaid?.benchmarks[0]?.matchType).toBe("exact");
     const vl_glmFree = vl_result.models.find(
       (p_model) => p_model.id === "opencode/glm-5.3-flash-free",
     );
     expect(vl_glmFree?.benchmarks[0]?.matchType).toBe("family_fallback");
-    expect(vl_glmFree?.benchmarks[0]?.score).toBe(
-      vl_glmPaid?.benchmarks[0]?.score,
-    );
+    expect(vl_glmFree?.benchmarks[0]?.score).toBe(vl_glmPaid?.benchmarks[0]?.score);
   });
 });

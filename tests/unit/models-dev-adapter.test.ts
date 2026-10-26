@@ -57,9 +57,7 @@ describe("f_parseModelsDevCrosswalk", () => {
     expect(vl_result.ok).toBe(true);
     if (!vl_result.ok) return;
     expect(
-      Object.keys(vl_result.value).every((p_key) =>
-        p_key.startsWith(`${k_modelsDevProviderId}/`),
-      ),
+      Object.keys(vl_result.value).every((p_key) => p_key.startsWith(`${k_modelsDevProviderId}/`)),
     ).toBe(true);
     expect(vl_result.value["openai/gpt-4o"]).toBeUndefined();
   });
@@ -80,9 +78,7 @@ describe("f_parseModelsDevCrosswalk", () => {
     if (!vl_result.ok) return;
     expect(Object.keys(vl_result.value)).toEqual(["opencode/good-model"]);
     expect(vl_result.warnings.length).toBeGreaterThan(0);
-    expect(
-      vl_result.warnings.every((p_warning) => p_warning.code === "skipped-model"),
-    ).toBe(true);
+    expect(vl_result.warnings.every((p_warning) => p_warning.code === "skipped-model")).toBe(true);
     expect(vl_result.value["opencode/good-model"]?.family).toBeNull();
     expect(vl_result.value["opencode/good-model"]?.releaseDate).toBeNull();
   });
@@ -91,9 +87,7 @@ describe("f_parseModelsDevCrosswalk", () => {
     expect(f_parseModelsDevCrosswalk({}).ok).toBe(false);
     expect(f_parseModelsDevCrosswalk({ openai: { models: {} } }).ok).toBe(false);
     expect(f_parseModelsDevCrosswalk("not-json").ok).toBe(false);
-    expect(f_parseModelsDevCrosswalk({ opencode: { models: { bad: 1 } } }).ok).toBe(
-      false,
-    );
+    expect(f_parseModelsDevCrosswalk({ opencode: { models: { bad: 1 } } }).ok).toBe(false);
   });
 });
 

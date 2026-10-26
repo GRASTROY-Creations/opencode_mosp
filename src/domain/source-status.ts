@@ -8,11 +8,7 @@
  */
 
 /** Optional data sources coordinated by the aggregation service. */
-export type SourceId =
-  | "opencode-models"
-  | "opencode-pricing"
-  | "llbm"
-  | "models-dev";
+export type SourceId = "opencode-models" | "opencode-pricing" | "llbm" | "models-dev";
 
 /** Runtime registry used by refresh/status code. */
 export const k_sourceIds: readonly SourceId[] = [
@@ -53,13 +49,7 @@ export interface SourceStatus {
  * - `stale`: usable snapshot whose data is past its TTL.
  * - `error`: no usable snapshot.
  */
-export type OverviewState =
-  | "idle"
-  | "loading"
-  | "ready"
-  | "partial"
-  | "stale"
-  | "error";
+export type OverviewState = "idle" | "loading" | "ready" | "partial" | "stale" | "error";
 
 /** Aggregate status returned with every snapshot. */
 export interface ModelOverviewStatus {

@@ -70,7 +70,7 @@ metrics):
 - Rows for both metrics share one `llbm` cache envelope with the benchmark TTL
   (default 6 hours); the adapter has **no private cache**. Cache schema
   version 2 (Adjustment 22) discards older rank-bearing entries. See
-  `docs/architecture/caching.md`.
+  `.docs/guide/architecture/caching.md`.
 - Fetched only through `/mosp update`; panel mounts read the cache only.
 
 ## Model mapping (`src/config/llbm-mappings.ts`)

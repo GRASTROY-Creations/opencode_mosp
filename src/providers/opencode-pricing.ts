@@ -52,12 +52,7 @@ export function f_parseOpencodePricing(
   }
 
   if (p_cost === null || p_cost === undefined) {
-    return f_ok(
-      f_createUnavailablePricing(
-        k_opencodePricingSource,
-        vl_observedAt.value,
-      ),
-    );
+    return f_ok(f_createUnavailablePricing(k_opencodePricingSource, vl_observedAt.value));
   }
 
   if (!Array.isArray(p_cost)) {
@@ -65,12 +60,7 @@ export function f_parseOpencodePricing(
   }
 
   if (p_cost.length === 0) {
-    return f_ok(
-      f_createUnavailablePricing(
-        k_opencodePricingSource,
-        vl_observedAt.value,
-      ),
-    );
+    return f_ok(f_createUnavailablePricing(k_opencodePricingSource, vl_observedAt.value));
   }
 
   const vl_entries: readonly unknown[] = p_cost;
@@ -95,9 +85,7 @@ export function f_parseOpencodePricing(
     }
 
     if (vl_seenThresholds.has(vl_band.value.thresholdTokens)) {
-      return f_fail(
-        `pricing.cost contains duplicate tier size ${vl_band.value.thresholdTokens}`,
-      );
+      return f_fail(`pricing.cost contains duplicate tier size ${vl_band.value.thresholdTokens}`);
     }
 
     vl_seenThresholds.add(vl_band.value.thresholdTokens);
@@ -111,8 +99,7 @@ export function f_parseOpencodePricing(
   }
 
   vl_tiers.sort(
-    (p_left, p_right) =>
-      p_left.contextThresholdTokens - p_right.contextThresholdTokens,
+    (p_left, p_right) => p_left.contextThresholdTokens - p_right.contextThresholdTokens,
   );
 
   return f_validateModelPricing({
@@ -138,10 +125,7 @@ function fh_parseCostBand(p_value: unknown): DomainResult<ParsedCostBand> {
     return vl_input;
   }
 
-  const vl_output = fh_parseRequiredMoney(
-    p_value.output,
-    "pricing.cost.output",
-  );
+  const vl_output = fh_parseRequiredMoney(p_value.output, "pricing.cost.output");
 
   if (!vl_output.ok) {
     return vl_output;
@@ -168,10 +152,7 @@ function fh_parseCostBand(p_value: unknown): DomainResult<ParsedCostBand> {
   });
 }
 
-function fh_parseRequiredMoney(
-  p_value: unknown,
-  p_field: string,
-): DomainResult<number> {
+function fh_parseRequiredMoney(p_value: unknown, p_field: string): DomainResult<number> {
   const vl_parsed = f_parseNullableNonNegativeNumber(p_value, p_field);
 
   if (!vl_parsed.ok) {
@@ -190,9 +171,7 @@ interface ParsedCachePrices {
   readonly write: number | null;
 }
 
-function fh_parseCachePrices(
-  p_value: unknown,
-): DomainResult<ParsedCachePrices> {
+function fh_parseCachePrices(p_value: unknown): DomainResult<ParsedCachePrices> {
   if (p_value === null || p_value === undefined) {
     return f_ok({ read: null, write: null });
   }
@@ -201,19 +180,13 @@ function fh_parseCachePrices(
     return f_fail("pricing.cost.cache must be an object");
   }
 
-  const vl_read = f_parseNullableNonNegativeNumber(
-    p_value.read,
-    "pricing.cost.cache.read",
-  );
+  const vl_read = f_parseNullableNonNegativeNumber(p_value.read, "pricing.cost.cache.read");
 
   if (!vl_read.ok) {
     return vl_read;
   }
 
-  const vl_write = f_parseNullableNonNegativeNumber(
-    p_value.write,
-    "pricing.cost.cache.write",
-  );
+  const vl_write = f_parseNullableNonNegativeNumber(p_value.write, "pricing.cost.cache.write");
 
   if (!vl_write.ok) {
     return vl_write;

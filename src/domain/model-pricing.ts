@@ -27,7 +27,7 @@ export type PricingCurrency = "USD";
  * Additional context-length price band reported by the registry.
  * `contextThresholdTokens` mirrors the source's tier size and marks where the
  * band starts; the exact prompt-vs-total interpretation is documented as
- * assumed in `docs/api/opencode-pricing.md`.
+ * assumed in `.docs/guide/sources/opencode-pricing.md`.
  */
 export interface ModelPricingTier {
   readonly contextThresholdTokens: number;
@@ -76,17 +76,13 @@ export function f_createUnavailablePricing(
 
 /** True when at least one base or tier input/output price was published. */
 export function f_hasPublishedPrice(p_pricing: ModelPricing): boolean {
-  if (
-    p_pricing.inputUsdPerMillionTokens !== null ||
-    p_pricing.outputUsdPerMillionTokens !== null
-  ) {
+  if (p_pricing.inputUsdPerMillionTokens !== null || p_pricing.outputUsdPerMillionTokens !== null) {
     return true;
   }
 
   return p_pricing.tiers.some(
     (p_tier) =>
-      p_tier.inputUsdPerMillionTokens !== null ||
-      p_tier.outputUsdPerMillionTokens !== null,
+      p_tier.inputUsdPerMillionTokens !== null || p_tier.outputUsdPerMillionTokens !== null,
   );
 }
 
@@ -95,17 +91,12 @@ export function f_hasPublishedPrice(p_pricing: ModelPricing): boolean {
  * exactly zero. Missing prices are *not* free: an unknown price is unknown.
  */
 export function f_isFreeModelPricing(p_pricing: ModelPricing): boolean {
-  if (
-    p_pricing.inputUsdPerMillionTokens !== 0 ||
-    p_pricing.outputUsdPerMillionTokens !== 0
-  ) {
+  if (p_pricing.inputUsdPerMillionTokens !== 0 || p_pricing.outputUsdPerMillionTokens !== 0) {
     return false;
   }
 
   return p_pricing.tiers.every(
-    (p_tier) =>
-      p_tier.inputUsdPerMillionTokens === 0 &&
-      p_tier.outputUsdPerMillionTokens === 0,
+    (p_tier) => p_tier.inputUsdPerMillionTokens === 0 && p_tier.outputUsdPerMillionTokens === 0,
   );
 }
 
@@ -114,9 +105,7 @@ export function f_isFreeModelPricing(p_pricing: ModelPricing): boolean {
  * records; this validator is the last line of defence before they reach the
  * aggregation service or UI.
  */
-export function f_validateModelPricing(
-  p_value: unknown,
-): DomainResult<ModelPricing> {
+export function f_validateModelPricing(p_value: unknown): DomainResult<ModelPricing> {
   if (!f_isRecord(p_value)) {
     return f_fail("pricing must be an object");
   }
@@ -161,19 +150,13 @@ export function f_validateModelPricing(
     return f_fail('pricing.currency must be "USD"');
   }
 
-  const vl_source = f_parseNullableString(
-    p_value.source,
-    "pricing.source",
-  );
+  const vl_source = f_parseNullableString(p_value.source, "pricing.source");
 
   if (!vl_source.ok) {
     return vl_source;
   }
 
-  const vl_observedAt = f_parseNullableTimestamp(
-    p_value.observedAt,
-    "pricing.observedAt",
-  );
+  const vl_observedAt = f_parseNullableTimestamp(p_value.observedAt, "pricing.observedAt");
 
   if (!vl_observedAt.ok) {
     return vl_observedAt;
@@ -197,9 +180,7 @@ export function f_validateModelPricing(
   });
 }
 
-function fh_parsePricingTiers(
-  p_value: unknown,
-): DomainResult<readonly ModelPricingTier[]> {
+function fh_parsePricingTiers(p_value: unknown): DomainResult<readonly ModelPricingTier[]> {
   if (!Array.isArray(p_value)) {
     return f_fail("pricing.tiers must be an array");
   }
@@ -220,9 +201,7 @@ function fh_parsePricingTiers(
   return f_ok(vl_tiers);
 }
 
-function fh_parsePricingTier(
-  p_value: unknown,
-): DomainResult<ModelPricingTier> {
+function fh_parsePricingTier(p_value: unknown): DomainResult<ModelPricingTier> {
   if (!f_isRecord(p_value)) {
     return f_fail("pricing tier must be an object");
   }

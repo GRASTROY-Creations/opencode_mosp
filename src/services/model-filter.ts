@@ -6,10 +6,7 @@
  * placeholder row cannot satisfy a "present" filter.
  */
 
-import {
-  f_findBenchmark,
-  type BenchmarkId,
-} from "../domain/model-benchmark";
+import { f_findBenchmark, type BenchmarkId } from "../domain/model-benchmark";
 import { f_isFreeModelPricing } from "../domain/model-pricing";
 import type { ModelRecord } from "../domain/model-record";
 
@@ -42,10 +39,7 @@ export function f_filterModels(
   const vl_freeOnly = p_options.freeOnly === true;
 
   return p_models.filter((p_model) => {
-    if (
-      vl_providerIds.size > 0 &&
-      !vl_providerIds.has(p_model.providerId)
-    ) {
+    if (vl_providerIds.size > 0 && !vl_providerIds.has(p_model.providerId)) {
       return false;
     }
 
@@ -61,10 +55,7 @@ export function f_filterModels(
   });
 }
 
-function fh_matchesPresence(
-  p_model: ModelRecord,
-  p_filter: BenchmarkPresenceFilter,
-): boolean {
+function fh_matchesPresence(p_model: ModelRecord, p_filter: BenchmarkPresenceFilter): boolean {
   const vl_present =
     p_filter.scope === "all"
       ? p_model.benchmarks.some((p_entry) => p_entry.score !== null)
@@ -73,10 +64,7 @@ function fh_matchesPresence(
   return p_filter.state === "present" ? vl_present : !vl_present;
 }
 
-function fh_hasBenchmarkScore(
-  p_model: ModelRecord,
-  p_benchmarkId: BenchmarkId,
-): boolean {
+function fh_hasBenchmarkScore(p_model: ModelRecord, p_benchmarkId: BenchmarkId): boolean {
   const vl_benchmark = f_findBenchmark(p_model.benchmarks, p_benchmarkId);
 
   return vl_benchmark !== null && vl_benchmark.score !== null;

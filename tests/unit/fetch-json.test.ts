@@ -32,10 +32,10 @@ describe("fetch-json", () => {
   test("returns parsed JSON from the injected fetch", async () => {
     const vl_fetch: FetchLike = () => Promise.resolve(fh_jsonResponse({ value: 42 }));
 
-    const vl_result = await f_fetchJson<{ value: number }>(
-      "https://example.test/data",
-      { timeoutMs: 1_000, fetchImpl: vl_fetch },
-    );
+    const vl_result = await f_fetchJson<{ value: number }>("https://example.test/data", {
+      timeoutMs: 1_000,
+      fetchImpl: vl_fetch,
+    });
 
     expect(vl_result.value).toBe(42);
   });
@@ -76,18 +76,15 @@ describe("fetch-json", () => {
       return Promise.resolve(fh_jsonResponse({ ok: true }));
     };
 
-    const vl_result = await f_fetchJsonWithRetry<{ ok: boolean }>(
-      "https://example.test/data",
-      {
-        timeoutMs: 1_000,
-        maxAttempts: 2,
-        fetchImpl: vl_fetch,
-        sleep: (p_ms) => {
-          vl_sleeps.push(p_ms);
-          return Promise.resolve();
-        },
+    const vl_result = await f_fetchJsonWithRetry<{ ok: boolean }>("https://example.test/data", {
+      timeoutMs: 1_000,
+      maxAttempts: 2,
+      fetchImpl: vl_fetch,
+      sleep: (p_ms) => {
+        vl_sleeps.push(p_ms);
+        return Promise.resolve();
       },
-    );
+    });
 
     expect(vl_result.ok).toBe(true);
     expect(vl_attempts).toBe(2);
@@ -126,15 +123,12 @@ describe("fetch-json", () => {
       return Promise.resolve(fh_jsonResponse({ ok: true }));
     };
 
-    const vl_result = await f_fetchJsonWithRetry<{ ok: boolean }>(
-      "https://example.test/data",
-      {
-        timeoutMs: 1_000,
-        maxAttempts: 2,
-        fetchImpl: vl_fetch,
-        sleep: () => Promise.resolve(),
-      },
-    );
+    const vl_result = await f_fetchJsonWithRetry<{ ok: boolean }>("https://example.test/data", {
+      timeoutMs: 1_000,
+      maxAttempts: 2,
+      fetchImpl: vl_fetch,
+      sleep: () => Promise.resolve(),
+    });
 
     expect(vl_result.ok).toBe(true);
     expect(vl_attempts).toBe(2);

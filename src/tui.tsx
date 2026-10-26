@@ -1,6 +1,7 @@
 /** @jsxImportSource @opentui/solid */
+import type { RGBA } from "@opentui/core";
 import { Plugin, usePlugin } from "@opencode/plugin/tui";
-import { For, Show, createSignal } from "solid-js";
+import { For, Show, createSignal, type JSX } from "solid-js";
 import type { ModelSortKey } from "./domain/model-sort";
 import {
   f_buildSidebarSummary,
@@ -37,7 +38,7 @@ import {
  * `panel-controller`. This file therefore renders plain mount-time text only —
  * no reactive text components or render pokes. Hover is deliberately not
  * visualized: a hover-driven repaint could only work through another remount,
- * which would flicker constantly. See docs/architecture/ui-integration.md.
+ * which would flicker constantly. See .docs/guide/architecture/ui-integration.md.
  */
 
 const k_panelName = "model-overview";
@@ -93,7 +94,7 @@ function ModelOverviewPanel(props: {
   readonly controller: OverviewController;
   /** Toolbar `[update]` action; same path as `/mosp update` (toasts included). */
   readonly onUpdate: () => void;
-}) {
+}): JSX.Element {
   const context = usePlugin();
   // All values are read once per mount; a controller mutation remounts the
   // panel (the only path this host repaints), so plain expressions suffice.
@@ -106,7 +107,7 @@ function ModelOverviewPanel(props: {
   const vl_sortKey = props.controller.sortKey();
   const vl_sortDirection = props.controller.sortDirection();
   const vl_loading = props.controller.loading();
-  const fh_chipColor = (p_active: boolean) =>
+  const fh_chipColor = (p_active: boolean): RGBA =>
     p_active ? context.theme.text.base : context.theme.text.faint;
   // Activation is press-and-release on the same target: the host dispatches
   // mouse `up` to the element under the cursor at release time, so without the
@@ -214,9 +215,7 @@ function ModelOverviewPanel(props: {
           <scrollbox flexGrow={1}>
             <box flexDirection="column">
               <Show when={vl_rows.filteredCount === 0}>
-                <text fg={context.theme.text.muted}>
-                  {f_buildEmptyMessage(vl_rows.totalCount)}
-                </text>
+                <text fg={context.theme.text.muted}>{f_buildEmptyMessage(vl_rows.totalCount)}</text>
               </Show>
               <text fg={context.theme.text.base}>{vl_tableLines.join("\n")}</text>
             </box>
@@ -236,7 +235,7 @@ function ModelOverviewPanel(props: {
   );
 }
 
-function SidebarStatus(props: { readonly controller: OverviewController }) {
+function SidebarStatus(props: { readonly controller: OverviewController }): JSX.Element {
   const context = usePlugin();
   const vl_summary = f_buildSidebarSummary(
     props.controller.leader(),

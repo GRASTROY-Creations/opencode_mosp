@@ -11,7 +11,7 @@
  *   updates inside this module.
  * - Consequence: all render-relevant state lives in controller-owned signals
  *   (below). Host stores are written through for persistence only and read
- *   once at creation time. See `docs/architecture/ui-integration.md`.
+ *   once at creation time. See `.docs/guide/architecture/ui-integration.md`.
  *
  * Data rules:
  * - Panel reads are host-first (`f_getModelOverviewFromHost`): the live
@@ -168,9 +168,7 @@ export function f_buildTableLines(
     (p_model) =>
       ` ${p_columns
         .map((p_column) =>
-          f_truncate(fh_tableCell(p_model, p_column.key), p_column.width).padEnd(
-            p_column.width,
-          ),
+          f_truncate(fh_tableCell(p_model, p_column.key), p_column.width).padEnd(p_column.width),
         )
         .join(" ")}`,
   );
@@ -368,10 +366,7 @@ function fh_describeFilters(p_filters: OverviewFilters): string {
 }
 
 /** Compact sidebar strip: the top LLMBM coding model plus the model count. */
-export function f_buildSidebarSummary(
-  p_leader: ModelRecord | null,
-  p_total: number,
-): string {
+export function f_buildSidebarSummary(p_leader: ModelRecord | null, p_total: number): string {
   if (p_leader === null) return `${p_total} models · no LLMBM data`;
   const vl_benchmark = f_getBenchmarkForModel(p_leader, "llbmCoding");
   return `${p_total} models · top coding ${f_truncate(p_leader.name, 18)} ${fh_benchmarkText(vl_benchmark)}`;
@@ -475,7 +470,8 @@ export function f_createOverviewController(
 
   // Controller-owned signals: the rendering source of truth.
   const [vl_sortKey, vl_setSortKey] = createSignal<ModelSortKey>(vl_initialSortKey);
-  const [vl_sortDirection, vl_setSortDirection] = createSignal<SortDirection>(vl_initialSortDirection);
+  const [vl_sortDirection, vl_setSortDirection] =
+    createSignal<SortDirection>(vl_initialSortDirection);
   const [vl_collapsed, vl_setCollapsed] = createSignal<boolean>(vl_initialCollapsed);
   const [vl_filters, vl_setFilters] = createSignal<OverviewFilters>(vl_initialFilters);
   const [vl_snapshot, vl_setSnapshot] = createSignal<ModelOverviewSnapshot | undefined>(undefined);
@@ -503,7 +499,7 @@ export function f_createOverviewController(
   // Every mutation therefore paints through a fresh mount: coalesce repaint
   // requests per microtask and remount the panel (close → open). Only repaints
   // when THIS plugin's panel is the active one; `presentation: "panel"` matches
-  // the toggle path. See docs/architecture/ui-integration.md.
+  // the toggle path. See .docs/guide/architecture/ui-integration.md.
   let vl_repaintQueued = false;
 
   function fh_pokeRender(): void {
@@ -571,7 +567,12 @@ export function f_createOverviewController(
     for (const vl_provider of p_context.data.location.provider.list(p_context.location) ?? []) {
       const vl_id = vl_provider.id;
       const vl_name = vl_provider.name;
-      if (typeof vl_id === "string" && vl_id.length > 0 && typeof vl_name === "string" && vl_name.length > 0) {
+      if (
+        typeof vl_id === "string" &&
+        vl_id.length > 0 &&
+        typeof vl_name === "string" &&
+        vl_name.length > 0
+      ) {
         vl_providerNames[vl_id] = vl_name;
       }
     }
@@ -585,13 +586,10 @@ export function f_createOverviewController(
    */
   function fh_readHostCatalog(): AdapterResult<readonly ModelRecord[]> {
     try {
-      return f_parseOpencodeModels(
-        p_context.data.location.model.list(p_context.location) ?? [],
-        {
-          observedAt: new Date().toISOString(),
-          providerNames: fh_providerNames(),
-        },
-      );
+      return f_parseOpencodeModels(p_context.data.location.model.list(p_context.location) ?? [], {
+        observedAt: new Date().toISOString(),
+        providerNames: fh_providerNames(),
+      });
     } catch {
       return f_adapterFail("host catalog read failed");
     }
@@ -606,13 +604,10 @@ export function f_createOverviewController(
     } catch {
       // Keep the last catalog; parsing below still uses the current list snapshot.
     }
-    return f_parseOpencodeModels(
-      p_context.data.location.model.list(p_context.location) ?? [],
-      {
-        observedAt: p_loadContext.now.toISOString(),
-        providerNames: fh_providerNames(),
-      },
-    );
+    return f_parseOpencodeModels(p_context.data.location.model.list(p_context.location) ?? [], {
+      observedAt: p_loadContext.now.toISOString(),
+      providerNames: fh_providerNames(),
+    });
   }
 
   function fh_loadLlbm(

@@ -1,0 +1,12 @@
+# Generated, vendored, or frozen content is never reformatted.
+node_modules/
+bun.lock
+dist/
+coverage/
+.cache/
+.direnv/
+tests/fixtures/*.json
+# Frozen historical records (Agents rule 11: never rewritten).
+.docs/decisions/history/
+# Markdown is prose maintained by hand (tables, wrapping); not auto-formatted.
+*.md

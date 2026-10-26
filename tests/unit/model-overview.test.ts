@@ -4,10 +4,7 @@ import type { ModelBenchmark } from "../../src/domain/model-benchmark";
 import type { ModelRecord } from "../../src/domain/model-record";
 import type { SourceId } from "../../src/domain/source-status";
 import type { ModelsDevCrosswalk } from "../../src/providers/models-dev";
-import {
-  f_adapterFail,
-  f_adapterOk,
-} from "../../src/providers/adapter-result";
+import { f_adapterFail, f_adapterOk } from "../../src/providers/adapter-result";
 import { f_createMemoryCache, type OverviewCache } from "../../src/services/cache";
 import {
   f_getModelOverview,
@@ -18,10 +15,7 @@ import {
   f_resolveRequestTimeoutMs,
   k_defaultRequestTimeoutMs,
 } from "../../src/services/model-overview";
-import {
-  f_createTestBenchmark,
-  f_createTestModel,
-} from "./test-models";
+import { f_createTestBenchmark, f_createTestModel } from "./test-models";
 
 const k_now = new Date("2026-10-24T12:00:00.000Z");
 const k_ttlMs = 6 * 60 * 60 * 1000;
@@ -68,12 +62,7 @@ async function fh_writeCache(
   p_fetchedAt: Date = k_now,
   p_ttlMs: number = k_ttlMs,
 ): Promise<void> {
-  const vl_result = await p_cache.write(
-    p_source,
-    p_payload,
-    p_fetchedAt,
-    p_ttlMs,
-  );
+  const vl_result = await p_cache.write(p_source, p_payload, p_fetchedAt, p_ttlMs);
 
   if (!vl_result.ok) {
     throw new Error(`test cache seed failed: ${vl_result.error}`);
@@ -99,28 +88,18 @@ describe("f_getModelOverview", () => {
     expect(vl_snapshot.models).toHaveLength(2);
     expect(vl_snapshot.status.state).toBe("ready");
     expect(vl_snapshot.status.lastRefreshAt).toBe(k_now.toISOString());
-    expect(
-      vl_snapshot.status.sources.map((p_source) => p_source.source),
-    ).toEqual([
+    expect(vl_snapshot.status.sources.map((p_source) => p_source.source)).toEqual([
       "opencode-models",
       "opencode-pricing",
       "llbm",
       "models-dev",
     ]);
-    expect(
-      vl_snapshot.status.sources.every(
-        (p_source) => p_source.state === "fresh",
-      ),
-    ).toBe(true);
+    expect(vl_snapshot.status.sources.every((p_source) => p_source.state === "fresh")).toBe(true);
     expect(vl_snapshot.matches).toHaveLength(2);
     expect(vl_snapshot.warnings).toEqual([]);
 
-    const vl_alpha = vl_snapshot.models.find(
-      (p_model) => p_model.modelId === "alpha",
-    );
-    const vl_beta = vl_snapshot.models.find(
-      (p_model) => p_model.modelId === "beta",
-    );
+    const vl_alpha = vl_snapshot.models.find((p_model) => p_model.modelId === "alpha");
+    const vl_beta = vl_snapshot.models.find((p_model) => p_model.modelId === "beta");
 
     // Only reported scores are attached; no rank is derived.
     expect(vl_alpha?.benchmarks[0]?.score).toBe(80);
@@ -140,18 +119,14 @@ describe("f_getModelOverview", () => {
     expect(vl_snapshot.matches).toEqual([]);
     expect(vl_snapshot.status.state).toBe("idle");
     expect(vl_snapshot.status.lastRefreshAt).toBeNull();
-    expect(
-      vl_snapshot.status.sources.every(
-        (p_source) => p_source.state === "unavailable",
-      ),
-    ).toBe(true);
+    expect(vl_snapshot.status.sources.every((p_source) => p_source.state === "unavailable")).toBe(
+      true,
+    );
   });
 
   test("marks pricing unavailable when no model publishes a price", async () => {
     const vl_cache = f_createMemoryCache();
-    const vl_models = [
-      f_createTestModel({ modelId: "free-unknown" }),
-    ];
+    const vl_models = [f_createTestModel({ modelId: "free-unknown" })];
 
     await fh_writeCache(vl_cache, "opencode-models", vl_models);
     await fh_writeCache(vl_cache, "llbm", fh_createLlbmRowsAlpha());
@@ -198,9 +173,7 @@ describe("f_getModelOverview", () => {
 
     expect(vl_snapshot.models).toEqual([]);
     expect(vl_snapshot.status.state).toBe("error");
-    expect(vl_snapshot.status.sources[0]?.error).toBe(
-      "cached model data is invalid",
-    );
+    expect(vl_snapshot.status.sources[0]?.error).toBe("cached model data is invalid");
   });
 });
 
@@ -235,11 +208,7 @@ describe("f_refreshModelOverview", () => {
     expect(vl_snapshot.matches).toHaveLength(2);
     expect(vl_snapshot.warnings).toEqual([]);
 
-    for (const vl_source of [
-      "opencode-models",
-      "llbm",
-      "models-dev",
-    ] as const) {
+    for (const vl_source of ["opencode-models", "llbm", "models-dev"] as const) {
       const vl_cached = await vl_cache.read(vl_source, k_now);
       expect(vl_cached.ok).toBe(true);
     }
@@ -260,8 +229,7 @@ describe("f_refreshModelOverview", () => {
     const vl_snapshot = await f_refreshModelOverview({
       cache: vl_cache,
       now: f_now,
-      loadModels: () =>
-        Promise.resolve(f_adapterOk(fh_createReadyModels())),
+      loadModels: () => Promise.resolve(f_adapterOk(fh_createReadyModels())),
       loadLlbm: () =>
         Promise.resolve(
           f_adapterFail<readonly ModelBenchmark[]>("llbm is down", [
@@ -271,9 +239,7 @@ describe("f_refreshModelOverview", () => {
       loadModelsDev: () => Promise.resolve(f_adapterOk(fh_createCrosswalk())),
     });
 
-    const vl_llbm = vl_snapshot.status.sources.find(
-      (p_source) => p_source.source === "llbm",
-    );
+    const vl_llbm = vl_snapshot.status.sources.find((p_source) => p_source.source === "llbm");
 
     expect(vl_snapshot.status.state).toBe("partial");
     expect(vl_llbm?.state).toBe("error");
@@ -290,13 +256,7 @@ describe("f_refreshModelOverview", () => {
     const vl_later = new Date(k_now.getTime() + 2_000);
     let vl_llbmCalls = 0;
 
-    await fh_writeCache(
-      vl_cache,
-      "opencode-models",
-      fh_createReadyModels(),
-      k_now,
-      1_000,
-    );
+    await fh_writeCache(vl_cache, "opencode-models", fh_createReadyModels(), k_now, 1_000);
     await fh_writeCache(vl_cache, "llbm", fh_createLlbmRowsAlpha());
 
     const vl_snapshot = await f_refreshModelOverview({
@@ -304,10 +264,7 @@ describe("f_refreshModelOverview", () => {
       now: () => vl_later,
       modelTtlMs: k_ttlMs,
       benchmarkTtlMs: k_ttlMs,
-      loadModels: () =>
-        Promise.resolve(
-          f_adapterFail<readonly ModelRecord[]>("registry is down"),
-        ),
+      loadModels: () => Promise.resolve(f_adapterFail<readonly ModelRecord[]>("registry is down")),
       loadLlbm: () => {
         vl_llbmCalls += 1;
         return Promise.resolve(f_adapterOk(fh_createLlbmRowsAlpha()));
@@ -342,8 +299,7 @@ describe("f_refreshModelOverview", () => {
     const vl_snapshot = await f_refreshModelOverview({
       cache: vl_cache,
       now: f_now,
-      loadModels: () =>
-        Promise.resolve(f_adapterFail<readonly ModelRecord[]>("registry down")),
+      loadModels: () => Promise.resolve(f_adapterFail<readonly ModelRecord[]>("registry down")),
       loadLlbm: () => Promise.resolve(f_adapterOk(fh_createLlbmRowsAlpha())),
       loadModelsDev: () => Promise.resolve(f_adapterOk(fh_createCrosswalk())),
     });
@@ -364,22 +320,14 @@ describe("f_refreshModelOverview", () => {
     });
 
     expect(vl_snapshot.status.state).toBe("error");
-    expect(vl_snapshot.status.sources[0]?.error).toBe(
-      "model catalog returned no models",
-    );
+    expect(vl_snapshot.status.sources[0]?.error).toBe("model catalog returned no models");
   });
 
   test("preserves last-known-good when an empty payload arrives", async () => {
     const vl_cache = f_createMemoryCache();
     const vl_later = new Date(k_now.getTime() + 2_000);
 
-    await fh_writeCache(
-      vl_cache,
-      "opencode-models",
-      fh_createReadyModels(),
-      k_now,
-      1_000,
-    );
+    await fh_writeCache(vl_cache, "opencode-models", fh_createReadyModels(), k_now, 1_000);
     await fh_writeCache(vl_cache, "llbm", fh_createLlbmRowsAlpha());
 
     const vl_snapshot = await f_refreshModelOverview({
@@ -503,8 +451,7 @@ describe("f_refreshModelOverview", () => {
     const vl_snapshot = await f_refreshModelOverview({
       cache: vl_failingCache,
       now: f_now,
-      loadModels: () =>
-        Promise.resolve(f_adapterOk(fh_createReadyModels())),
+      loadModels: () => Promise.resolve(f_adapterOk(fh_createReadyModels())),
       loadLlbm: () => Promise.resolve(f_adapterOk(fh_createLlbmRowsAlpha())),
       loadModelsDev: () => Promise.resolve(f_adapterOk(fh_createCrosswalk())),
     });
@@ -529,7 +476,6 @@ describe("f_refreshModelOverview", () => {
     expect(vl_snapshot.status.state).toBe("error");
     expect(vl_snapshot.models).toEqual([]);
   });
-
 });
 
 describe("f_getOverviewStatus", () => {
@@ -651,9 +597,7 @@ describe("f_mergeModelSources", () => {
         id: "opencode/bench-a",
         modelId: "bench-a",
         providerId: "opencode",
-        benchmarks: [
-          f_createTestBenchmark("llbmCoding", 70, { sourceModelId: "bench-a" }),
-        ],
+        benchmarks: [f_createTestBenchmark("llbmCoding", 70, { sourceModelId: "bench-a" })],
       }),
     ];
 
@@ -665,11 +609,26 @@ describe("f_mergeModelSources", () => {
 
   test("sets merged source only for duplicated IDs", () => {
     const vl_first: readonly ModelRecord[] = [
-      f_createTestModel({ id: "opencode/a", modelId: "a", providerId: "opencode", source: "opencode" }),
+      f_createTestModel({
+        id: "opencode/a",
+        modelId: "a",
+        providerId: "opencode",
+        source: "opencode",
+      }),
     ];
     const vl_second: readonly ModelRecord[] = [
-      f_createTestModel({ id: "opencode/a", modelId: "a", providerId: "opencode", source: "opencode" }),
-      f_createTestModel({ id: "opencode/b", modelId: "b", providerId: "opencode", source: "opencode" }),
+      f_createTestModel({
+        id: "opencode/a",
+        modelId: "a",
+        providerId: "opencode",
+        source: "opencode",
+      }),
+      f_createTestModel({
+        id: "opencode/b",
+        modelId: "b",
+        providerId: "opencode",
+        source: "opencode",
+      }),
     ];
 
     const vl_merged = f_mergeModelSources([vl_first, vl_second]);
@@ -701,9 +660,7 @@ describe("f_resolveRequestTimeoutMs", () => {
   });
 
   test("returns the positive millisecond value", () => {
-    expect(f_resolveRequestTimeoutMs({ OPENCODE_REQUEST_TIMEOUT_MS: "5000" })).toBe(
-      5_000,
-    );
+    expect(f_resolveRequestTimeoutMs({ OPENCODE_REQUEST_TIMEOUT_MS: "5000" })).toBe(5_000);
   });
 });
 
@@ -762,9 +719,7 @@ describe("f_getModelOverviewFromHost", () => {
     });
 
     expect(vl_snapshot.models).toHaveLength(2);
-    expect(vl_snapshot.warnings.some((p_w) => p_w.code === "host-catalog-fallback")).toBe(
-      true,
-    );
+    expect(vl_snapshot.warnings.some((p_w) => p_w.code === "host-catalog-fallback")).toBe(true);
   });
 
   test("failed host read falls back to cached snapshot", async () => {
@@ -778,9 +733,7 @@ describe("f_getModelOverviewFromHost", () => {
     });
 
     expect(vl_snapshot.models).toHaveLength(2);
-    expect(vl_snapshot.warnings.some((p_w) => p_w.message.includes("boom"))).toBe(
-      true,
-    );
+    expect(vl_snapshot.warnings.some((p_w) => p_w.message.includes("boom"))).toBe(true);
   });
 
   test("no cache plus host failure yields no models", async () => {

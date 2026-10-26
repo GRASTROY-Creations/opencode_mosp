@@ -13,7 +13,7 @@
  *
  * The OpenCode registry payload carries model prices together with the catalog,
  * so `opencode-pricing` is a derived source view rather than a second request.
- * This is documented in `docs/architecture/caching.md`.
+ * This is documented in `.docs/guide/architecture/caching.md`.
  */
 
 import {
@@ -27,16 +27,8 @@ import {
   type ModelPricing,
   type ModelPricingTier,
 } from "../domain/model-pricing";
-import {
-  f_validateModelRecord,
-  type ModelRecord,
-} from "../domain/model-record";
-import {
-  f_fail,
-  f_isRecord,
-  f_ok,
-  type DomainResult,
-} from "../domain/guards";
+import { f_validateModelRecord, type ModelRecord } from "../domain/model-record";
+import { f_fail, f_isRecord, f_ok, type DomainResult } from "../domain/guards";
 import {
   type ModelOverviewStatus,
   type OverviewState,
@@ -54,17 +46,12 @@ import {
   type ModelsDevCrosswalk,
   type ModelsDevModelMeta,
 } from "../providers/models-dev";
-import {
-  f_resolveCacheTtls,
-  type OverviewCache,
-} from "./cache";
+import { f_resolveCacheTtls, type OverviewCache } from "./cache";
 import {
   f_matchBenchmarkRecords,
   type BenchmarkMatch,
   type UnmatchedBenchmark,
 } from "./model-matching";
-
-
 
 /** Default request budget when a caller does not supply one. */
 export const k_defaultRequestTimeoutMs = 10_000;
@@ -159,16 +146,9 @@ export async function f_getModelOverview(
   p_options: OverviewReadOptions,
 ): Promise<ModelOverviewSnapshot> {
   const vl_now = fh_resolveNow(p_options.now);
-  const [vl_models, vl_llbm, vl_modelsDev] =
-    await fh_readAllSources(p_options.cache, vl_now);
+  const [vl_models, vl_llbm, vl_modelsDev] = await fh_readAllSources(p_options.cache, vl_now);
 
-  return fh_assembleSnapshot(
-    vl_models,
-    vl_llbm,
-    vl_modelsDev,
-    p_options.cache.key,
-    [],
-  );
+  return fh_assembleSnapshot(vl_models, vl_llbm, vl_modelsDev, p_options.cache.key, []);
 }
 
 /**
@@ -187,14 +167,8 @@ export async function f_getModelOverviewFromHost(
   let vl_models: SourceRead<readonly ModelRecord[]>;
 
   if (p_options.hostModels.ok && p_options.hostModels.value.length > 0) {
-    vl_models = fh_successfulRead(
-      p_options.hostModels.value,
-      vl_now.toISOString(),
-      true,
-    );
-    vl_warnings.push(
-      ...fh_mapWarnings("opencode-models", p_options.hostModels.warnings),
-    );
+    vl_models = fh_successfulRead(p_options.hostModels.value, vl_now.toISOString(), true);
+    vl_warnings.push(...fh_mapWarnings("opencode-models", p_options.hostModels.warnings));
   } else {
     vl_warnings.push({
       source: "opencode-models",
@@ -211,13 +185,7 @@ export async function f_getModelOverviewFromHost(
     fh_readModelsDev(p_options.cache, vl_now),
   ]);
 
-  return fh_assembleSnapshot(
-    vl_models,
-    vl_llbm,
-    vl_modelsDev,
-    p_options.cache.key,
-    vl_warnings,
-  );
+  return fh_assembleSnapshot(vl_models, vl_llbm, vl_modelsDev, p_options.cache.key, vl_warnings);
 }
 
 export function f_refreshModelOverview(
@@ -250,19 +218,10 @@ export async function f_getOverviewStatus(
   p_options: OverviewReadOptions,
 ): Promise<ModelOverviewStatus> {
   const vl_now = fh_resolveNow(p_options.now);
-  const [vl_models, vl_llbm, vl_modelsDev] =
-    await fh_readAllSources(p_options.cache, vl_now);
-  const vl_merged = f_mergeModelSources([
-    vl_models.value === null ? [] : vl_models.value,
-  ]);
+  const [vl_models, vl_llbm, vl_modelsDev] = await fh_readAllSources(p_options.cache, vl_now);
+  const vl_merged = f_mergeModelSources([vl_models.value === null ? [] : vl_models.value]);
 
-  return fh_buildStatus(
-    p_options.cache.key,
-    vl_models,
-    vl_llbm,
-    vl_modelsDev,
-    vl_merged,
-  );
+  return fh_buildStatus(p_options.cache.key, vl_models, vl_llbm, vl_modelsDev, vl_merged);
 }
 
 /**
@@ -295,9 +254,7 @@ export function f_mergeModelSources(
   }
 
   return [...vl_byId.values()].map((p_model) =>
-    vl_mergedIds.has(p_model.id)
-      ? { ...p_model, source: "merged" }
-      : p_model,
+    vl_mergedIds.has(p_model.id) ? { ...p_model, source: "merged" } : p_model,
   );
 }
 
@@ -331,10 +288,8 @@ async function fh_performRefresh(
   const vl_nowIso = vl_now.toISOString();
   const vl_ttls = f_resolveCacheTtls();
   const vl_modelTtlMs = p_options.modelTtlMs ?? vl_ttls.modelTtlMs;
-  const vl_benchmarkTtlMs =
-    p_options.benchmarkTtlMs ?? vl_ttls.benchmarkTtlMs;
-  const vl_timeoutMs =
-    p_options.timeoutMs ?? f_resolveRequestTimeoutMs();
+  const vl_benchmarkTtlMs = p_options.benchmarkTtlMs ?? vl_ttls.benchmarkTtlMs;
+  const vl_timeoutMs = p_options.timeoutMs ?? f_resolveRequestTimeoutMs();
   const vl_context: OverviewLoadContext = {
     signal: p_options.signal ?? null,
     now: vl_now,
@@ -343,8 +298,7 @@ async function fh_performRefresh(
   const vl_force = p_options.force === true;
   const vl_warnings: OverviewWarning[] = [];
 
-  let [vl_models, vl_llbm, vl_modelsDev] =
-    await fh_readAllSources(p_options.cache, vl_now);
+  let [vl_models, vl_llbm, vl_modelsDev] = await fh_readAllSources(p_options.cache, vl_now);
 
   const vl_jobs: RefreshJob[] = [];
 
@@ -353,10 +307,7 @@ async function fh_performRefresh(
       source: "opencode-models",
       run: async (): Promise<void> => {
         fh_recordAttempt(p_options.cache.key, "opencode-models", vl_nowIso);
-        const vl_result = await fh_runModelLoader(
-          p_options.loadModels,
-          vl_context,
-        );
+        const vl_result = await fh_runModelLoader(p_options.loadModels, vl_context);
 
         vl_warnings.push(...fh_mapWarnings("opencode-models", vl_result.warnings));
 
@@ -366,11 +317,7 @@ async function fh_performRefresh(
         }
 
         if (vl_result.value.length === 0) {
-          vl_models = fh_applyFailure(
-            vl_models,
-            "model catalog returned no models",
-            vl_nowIso,
-          );
+          vl_models = fh_applyFailure(vl_models, "model catalog returned no models", vl_nowIso);
           return;
         }
 
@@ -399,10 +346,7 @@ async function fh_performRefresh(
       source: "llbm",
       run: async (): Promise<void> => {
         fh_recordAttempt(p_options.cache.key, "llbm", vl_nowIso);
-        const vl_result = await fh_runBenchmarkLoader(
-          p_options.loadLlbm,
-          vl_context,
-        );
+        const vl_result = await fh_runBenchmarkLoader(p_options.loadLlbm, vl_context);
 
         vl_warnings.push(...fh_mapWarnings("llbm", vl_result.warnings));
 
@@ -412,11 +356,7 @@ async function fh_performRefresh(
         }
 
         if (vl_result.value.length === 0) {
-          vl_llbm = fh_applyFailure(
-            vl_llbm,
-            "LLMBM returned no benchmark rows",
-            vl_nowIso,
-          );
+          vl_llbm = fh_applyFailure(vl_llbm, "LLMBM returned no benchmark rows", vl_nowIso);
           return;
         }
 
@@ -445,10 +385,7 @@ async function fh_performRefresh(
       source: "models-dev",
       run: async (): Promise<void> => {
         fh_recordAttempt(p_options.cache.key, "models-dev", vl_nowIso);
-        const vl_result = await fh_runModelsDevLoader(
-          p_options.loadModelsDev,
-          vl_context,
-        );
+        const vl_result = await fh_runModelsDevLoader(p_options.loadModelsDev, vl_context);
 
         vl_warnings.push(...fh_mapWarnings("models-dev", vl_result.warnings));
 
@@ -459,11 +396,7 @@ async function fh_performRefresh(
 
         const vl_crosswalk = vl_result.value;
         if (Object.keys(vl_crosswalk).length === 0) {
-          vl_modelsDev = fh_applyFailure(
-            vl_modelsDev,
-            "models.dev returned no models",
-            vl_nowIso,
-          );
+          vl_modelsDev = fh_applyFailure(vl_modelsDev, "models.dev returned no models", vl_nowIso);
           return;
         }
 
@@ -489,13 +422,7 @@ async function fh_performRefresh(
 
   await Promise.all(vl_jobs.map((p_job) => p_job.run()));
 
-  return fh_assembleSnapshot(
-    vl_models,
-    vl_llbm,
-    vl_modelsDev,
-    p_options.cache.key,
-    vl_warnings,
-  );
+  return fh_assembleSnapshot(vl_models, vl_llbm, vl_modelsDev, p_options.cache.key, vl_warnings);
 }
 
 function fh_assembleSnapshot(
@@ -507,19 +434,12 @@ function fh_assembleSnapshot(
 ): ModelOverviewSnapshot {
   const vl_sourceModels = p_models.value === null ? [] : p_models.value;
   const vl_merged = f_mergeModelSources([vl_sourceModels]);
-  const vl_benchmarks: readonly ModelBenchmark[] =
-    p_llbm.value === null ? [] : p_llbm.value;
+  const vl_benchmarks: readonly ModelBenchmark[] = p_llbm.value === null ? [] : p_llbm.value;
   const vl_match = f_matchBenchmarkRecords(vl_merged, vl_benchmarks);
 
   return {
     models: vl_match.models,
-    status: fh_buildStatus(
-      p_cacheKey,
-      p_models,
-      p_llbm,
-      p_modelsDev,
-      vl_match.models,
-    ),
+    status: fh_buildStatus(p_cacheKey, p_models, p_llbm, p_modelsDev, vl_match.models),
     matches: vl_match.matches,
     unmatched: vl_match.unmatched,
     warnings: p_warnings,
@@ -560,8 +480,7 @@ function fh_createStatus<T>(
     source: p_source,
     state: p_read.state,
     lastSuccessAt: p_read.fetchedAt,
-    lastAttemptAt:
-      fh_getLastAttempt(p_cacheKey, p_source) ?? p_read.lastAttemptAt,
+    lastAttemptAt: fh_getLastAttempt(p_cacheKey, p_source) ?? p_read.lastAttemptAt,
     error: p_read.error,
   };
 }
@@ -580,9 +499,7 @@ function fh_createPricingStatus(
       source: "opencode-pricing",
       state: p_models.state,
       lastSuccessAt: null,
-      lastAttemptAt:
-        fh_getLastAttempt(p_cacheKey, "opencode-models") ??
-        p_models.lastAttemptAt,
+      lastAttemptAt: fh_getLastAttempt(p_cacheKey, "opencode-models") ?? p_models.lastAttemptAt,
       error: p_models.error,
     };
   }
@@ -592,9 +509,7 @@ function fh_createPricingStatus(
       source: "opencode-pricing",
       state: "unavailable",
       lastSuccessAt: null,
-      lastAttemptAt:
-        fh_getLastAttempt(p_cacheKey, "opencode-models") ??
-        p_models.lastAttemptAt,
+      lastAttemptAt: fh_getLastAttempt(p_cacheKey, "opencode-models") ?? p_models.lastAttemptAt,
       error: null,
     };
   }
@@ -603,9 +518,7 @@ function fh_createPricingStatus(
     source: "opencode-pricing",
     state: p_models.state,
     lastSuccessAt: p_models.fetchedAt,
-    lastAttemptAt:
-      fh_getLastAttempt(p_cacheKey, "opencode-models") ??
-      p_models.lastAttemptAt,
+    lastAttemptAt: fh_getLastAttempt(p_cacheKey, "opencode-models") ?? p_models.lastAttemptAt,
     error: p_models.error,
   };
 }
@@ -616,10 +529,7 @@ function fh_deriveOverviewState(
   p_sources: readonly SourceStatus[],
 ): OverviewState {
   if (p_models.value === null) {
-    if (
-      p_models.state === "error" ||
-      p_llbm.state === "error"
-    ) {
+    if (p_models.state === "error" || p_llbm.state === "error") {
       return "error";
     }
 
@@ -627,10 +537,7 @@ function fh_deriveOverviewState(
   }
 
   if (
-    p_sources.some(
-      (p_source) =>
-        p_source.state === "error" || p_source.state === "unavailable",
-    )
+    p_sources.some((p_source) => p_source.state === "error" || p_source.state === "unavailable")
   ) {
     return "partial";
   }
@@ -675,11 +582,7 @@ async function fh_readModels(
     return fh_invalidPayload(vl_read.value.envelope.fetchedAt, "cached model data is invalid");
   }
 
-  return fh_successfulRead(
-    vl_parsed.value,
-    vl_read.value.envelope.fetchedAt,
-    vl_read.value.fresh,
-  );
+  return fh_successfulRead(vl_parsed.value, vl_read.value.envelope.fetchedAt, vl_read.value.fresh);
 }
 
 async function fh_readModelsDev(
@@ -701,11 +604,7 @@ async function fh_readModelsDev(
     );
   }
 
-  return fh_successfulRead(
-    vl_parsed.value,
-    vl_read.value.envelope.fetchedAt,
-    vl_read.value.fresh,
-  );
+  return fh_successfulRead(vl_parsed.value, vl_read.value.envelope.fetchedAt, vl_read.value.fresh);
 }
 
 /** Read the single `llbm` cache entry (rows for every LLMBM benchmark id). */
@@ -722,22 +621,13 @@ async function fh_readBenchmarks(
   const vl_parsed = fh_parseCachedBenchmarks(vl_read.value.envelope.payload);
 
   if (!vl_parsed.ok) {
-    return fh_invalidPayload(
-      vl_read.value.envelope.fetchedAt,
-      "cached benchmark data is invalid",
-    );
+    return fh_invalidPayload(vl_read.value.envelope.fetchedAt, "cached benchmark data is invalid");
   }
 
-  return fh_successfulRead(
-    vl_parsed.value,
-    vl_read.value.envelope.fetchedAt,
-    vl_read.value.fresh,
-  );
+  return fh_successfulRead(vl_parsed.value, vl_read.value.envelope.fetchedAt, vl_read.value.fresh);
 }
 
-function fh_parseCachedModels(
-  p_payload: unknown,
-): DomainResult<readonly ModelRecord[]> {
+function fh_parseCachedModels(p_payload: unknown): DomainResult<readonly ModelRecord[]> {
   if (!Array.isArray(p_payload)) {
     return f_fail("cached models must be an array");
   }
@@ -768,9 +658,7 @@ function fh_parseCachedModels(
   return f_ok(vl_models);
 }
 
-function fh_parseCachedModelsDev(
-  p_payload: unknown,
-): DomainResult<ModelsDevCrosswalk> {
+function fh_parseCachedModelsDev(p_payload: unknown): DomainResult<ModelsDevCrosswalk> {
   if (!f_isRecord(p_payload)) {
     return f_fail("cached models.dev crosswalk must be an object");
   }
@@ -800,9 +688,7 @@ function fh_parseCachedModelsDev(
   return f_ok(vl_entries);
 }
 
-function fh_parseCachedBenchmarks(
-  p_payload: unknown,
-): DomainResult<readonly ModelBenchmark[]> {
+function fh_parseCachedBenchmarks(p_payload: unknown): DomainResult<readonly ModelBenchmark[]> {
   if (!Array.isArray(p_payload)) {
     return f_fail("cached benchmarks must be an array");
   }
@@ -814,9 +700,7 @@ function fh_parseCachedBenchmarks(
     const vl_benchmark = f_validateModelBenchmark(vl_entry);
 
     if (!vl_benchmark.ok) {
-      return f_fail(
-        `cached benchmark at index ${vl_index}: ${vl_benchmark.error}`,
-      );
+      return f_fail(`cached benchmark at index ${vl_index}: ${vl_benchmark.error}`);
     }
 
     vl_benchmarks.push(vl_benchmark.value);
@@ -829,11 +713,7 @@ function fh_parseCachedBenchmarks(
   return f_ok(vl_benchmarks);
 }
 
-function fh_successfulRead<T>(
-  p_value: T,
-  p_fetchedAt: string,
-  p_fresh: boolean,
-): SourceRead<T> {
+function fh_successfulRead<T>(p_value: T, p_fetchedAt: string, p_fresh: boolean): SourceRead<T> {
   return {
     value: p_value,
     fetchedAt: p_fetchedAt,
@@ -843,10 +723,7 @@ function fh_successfulRead<T>(
   };
 }
 
-function fh_invalidPayload<T>(
-  p_fetchedAt: string | null,
-  p_error: string,
-): SourceRead<T> {
+function fh_invalidPayload<T>(p_fetchedAt: string | null, p_error: string): SourceRead<T> {
   return {
     value: null,
     fetchedAt: p_fetchedAt,
@@ -856,9 +733,7 @@ function fh_invalidPayload<T>(
   };
 }
 
-function fh_failedRead<T>(
-  p_reason: "missing" | "invalid" | "unreadable",
-): SourceRead<T> {
+function fh_failedRead<T>(p_reason: "missing" | "invalid" | "unreadable"): SourceRead<T> {
   if (p_reason === "missing") {
     return {
       value: null,
@@ -874,17 +749,11 @@ function fh_failedRead<T>(
     fetchedAt: null,
     lastAttemptAt: null,
     state: "error",
-    error:
-      p_reason === "invalid"
-        ? "cache entry is invalid"
-        : "cache entry could not be read",
+    error: p_reason === "invalid" ? "cache entry is invalid" : "cache entry could not be read",
   };
 }
 
-function fh_applySuccess<T>(
-  p_value: T,
-  p_nowIso: string,
-): SourceRead<T> {
+function fh_applySuccess<T>(p_value: T, p_nowIso: string): SourceRead<T> {
   return {
     value: p_value,
     fetchedAt: p_nowIso,
@@ -907,16 +776,8 @@ function fh_applyFailure<T>(
   };
 }
 
-function fh_shouldRefresh<T>(
-  p_read: SourceRead<readonly T[]>,
-  p_force: boolean,
-): boolean {
-  return (
-    p_force ||
-    p_read.state !== "fresh" ||
-    p_read.value === null ||
-    p_read.value.length === 0
-  );
+function fh_shouldRefresh<T>(p_read: SourceRead<readonly T[]>, p_force: boolean): boolean {
+  return p_force || p_read.state !== "fresh" || p_read.value === null || p_read.value.length === 0;
 }
 
 function fh_shouldRefreshModelsDev(
@@ -975,27 +836,17 @@ function fh_mapWarnings(
   }));
 }
 
-function fh_recordAttempt(
-  p_cacheKey: string,
-  p_source: SourceId,
-  p_at: string,
-): void {
-  const vl_attempts =
-    k_lastAttempts.get(p_cacheKey) ?? new Map<SourceId, string>();
+function fh_recordAttempt(p_cacheKey: string, p_source: SourceId, p_at: string): void {
+  const vl_attempts = k_lastAttempts.get(p_cacheKey) ?? new Map<SourceId, string>();
   vl_attempts.set(p_source, p_at);
   k_lastAttempts.set(p_cacheKey, vl_attempts);
 }
 
-function fh_getLastAttempt(
-  p_cacheKey: string,
-  p_source: SourceId,
-): string | null {
+function fh_getLastAttempt(p_cacheKey: string, p_source: SourceId): string | null {
   return k_lastAttempts.get(p_cacheKey)?.get(p_source) ?? null;
 }
 
-function fh_latestFetchedAt(
-  p_values: readonly (string | null)[],
-): string | null {
+function fh_latestFetchedAt(p_values: readonly (string | null)[]): string | null {
   let vl_latest: string | null = null;
 
   for (const vl_value of p_values) {
@@ -1011,20 +862,14 @@ function fh_latestFetchedAt(
   return vl_latest;
 }
 
-function fh_mergeModelPair(
-  p_existing: ModelRecord,
-  p_incoming: ModelRecord,
-): ModelRecord {
+function fh_mergeModelPair(p_existing: ModelRecord, p_incoming: ModelRecord): ModelRecord {
   return {
     ...p_existing,
     canonicalId: p_existing.canonicalId ?? p_incoming.canonicalId,
     releaseDate: p_existing.releaseDate ?? p_incoming.releaseDate,
     contextWindow: p_existing.contextWindow ?? p_incoming.contextWindow,
     pricing: fh_mergePricing(p_existing.pricing, p_incoming.pricing),
-    benchmarks: fh_mergeBenchmarks(
-      p_existing.benchmarks,
-      p_incoming.benchmarks,
-    ),
+    benchmarks: fh_mergeBenchmarks(p_existing.benchmarks, p_incoming.benchmarks),
     lastUpdatedAt:
       p_existing.lastUpdatedAt >= p_incoming.lastUpdatedAt
         ? p_existing.lastUpdatedAt
@@ -1032,23 +877,16 @@ function fh_mergeModelPair(
   };
 }
 
-function fh_mergePricing(
-  p_existing: ModelPricing,
-  p_incoming: ModelPricing,
-): ModelPricing {
+function fh_mergePricing(p_existing: ModelPricing, p_incoming: ModelPricing): ModelPricing {
   return {
     inputUsdPerMillionTokens:
-      p_existing.inputUsdPerMillionTokens ??
-      p_incoming.inputUsdPerMillionTokens,
+      p_existing.inputUsdPerMillionTokens ?? p_incoming.inputUsdPerMillionTokens,
     outputUsdPerMillionTokens:
-      p_existing.outputUsdPerMillionTokens ??
-      p_incoming.outputUsdPerMillionTokens,
+      p_existing.outputUsdPerMillionTokens ?? p_incoming.outputUsdPerMillionTokens,
     cacheReadUsdPerMillionTokens:
-      p_existing.cacheReadUsdPerMillionTokens ??
-      p_incoming.cacheReadUsdPerMillionTokens,
+      p_existing.cacheReadUsdPerMillionTokens ?? p_incoming.cacheReadUsdPerMillionTokens,
     cacheWriteUsdPerMillionTokens:
-      p_existing.cacheWriteUsdPerMillionTokens ??
-      p_incoming.cacheWriteUsdPerMillionTokens,
+      p_existing.cacheWriteUsdPerMillionTokens ?? p_incoming.cacheWriteUsdPerMillionTokens,
     currency: "USD",
     source: p_existing.source ?? p_incoming.source,
     observedAt: p_existing.observedAt ?? p_incoming.observedAt,
@@ -1077,23 +915,18 @@ function fh_mergePricingTiers(
     vl_byThreshold.set(vl_tier.contextThresholdTokens, {
       contextThresholdTokens: vl_current.contextThresholdTokens,
       inputUsdPerMillionTokens:
-        vl_current.inputUsdPerMillionTokens ??
-        vl_tier.inputUsdPerMillionTokens,
+        vl_current.inputUsdPerMillionTokens ?? vl_tier.inputUsdPerMillionTokens,
       outputUsdPerMillionTokens:
-        vl_current.outputUsdPerMillionTokens ??
-        vl_tier.outputUsdPerMillionTokens,
+        vl_current.outputUsdPerMillionTokens ?? vl_tier.outputUsdPerMillionTokens,
       cacheReadUsdPerMillionTokens:
-        vl_current.cacheReadUsdPerMillionTokens ??
-        vl_tier.cacheReadUsdPerMillionTokens,
+        vl_current.cacheReadUsdPerMillionTokens ?? vl_tier.cacheReadUsdPerMillionTokens,
       cacheWriteUsdPerMillionTokens:
-        vl_current.cacheWriteUsdPerMillionTokens ??
-        vl_tier.cacheWriteUsdPerMillionTokens,
+        vl_current.cacheWriteUsdPerMillionTokens ?? vl_tier.cacheWriteUsdPerMillionTokens,
     });
   }
 
   return [...vl_byThreshold.values()].sort(
-    (p_left, p_right) =>
-      p_left.contextThresholdTokens - p_right.contextThresholdTokens,
+    (p_left, p_right) => p_left.contextThresholdTokens - p_right.contextThresholdTokens,
   );
 }
 
@@ -1124,9 +957,7 @@ function fh_mergeBenchmarks(
 
   return k_benchmarkIds
     .map((p_benchmarkId) => vl_byId.get(p_benchmarkId))
-    .filter((p_benchmark): p_benchmark is ModelBenchmark =>
-      p_benchmark !== undefined,
-    );
+    .filter((p_benchmark): p_benchmark is ModelBenchmark => p_benchmark !== undefined);
 }
 
 function fh_resolveNow(p_now: (() => Date) | undefined): Date {

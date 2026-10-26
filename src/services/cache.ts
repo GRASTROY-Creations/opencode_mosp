@@ -15,10 +15,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { f_isRecord } from "../domain/guards";
-import {
-  k_sourceIds,
-  type SourceId,
-} from "../domain/source-status";
+import { k_sourceIds, type SourceId } from "../domain/source-status";
 
 /** Bump when the envelope or any cached payload shape changes. */
 export const k_cacheSchemaVersion = 2;
@@ -58,8 +55,7 @@ export type CacheReadResult =
   | { readonly ok: false; readonly reason: CacheReadFailure };
 
 export type CacheWriteResult =
-  | { readonly ok: true }
-  | { readonly ok: false; readonly error: string };
+  { readonly ok: true } | { readonly ok: false; readonly error: string };
 
 /**
  * Source-keyed cache seam. `key` identifies the backing store so refresh
@@ -246,10 +242,7 @@ export function f_getDefaultCacheDirectory(): string {
   }
 
   const vl_xdg = process.env.XDG_CACHE_HOME?.trim();
-  const vl_base =
-    vl_xdg !== undefined && vl_xdg.length > 0
-      ? vl_xdg
-      : join(homedir(), ".cache");
+  const vl_base = vl_xdg !== undefined && vl_xdg.length > 0 ? vl_xdg : join(homedir(), ".cache");
 
   return resolve(vl_base, "opencode-model-overview");
 }
@@ -288,10 +281,7 @@ function fh_createEnvelope(
   };
 }
 
-function fh_parseEnvelope(
-  p_value: unknown,
-  p_source: SourceId,
-): CacheEnvelope | null {
+function fh_parseEnvelope(p_value: unknown, p_source: SourceId): CacheEnvelope | null {
   if (!f_isRecord(p_value)) {
     return null;
   }
@@ -342,18 +332,11 @@ function fh_isFresh(p_envelope: CacheEnvelope, p_now: Date): boolean {
 }
 
 function fh_isValidTtl(p_value: unknown): p_value is number {
-  return (
-    typeof p_value === "number" &&
-    Number.isFinite(p_value) &&
-    p_value >= 0
-  );
+  return typeof p_value === "number" && Number.isFinite(p_value) && p_value >= 0;
 }
 
 function fh_isSourceId(p_value: unknown): p_value is SourceId {
-  return (
-    typeof p_value === "string" &&
-    (k_sourceIds as readonly string[]).includes(p_value)
-  );
+  return typeof p_value === "string" && (k_sourceIds as readonly string[]).includes(p_value);
 }
 
 function fh_cachePath(p_directory: string, p_source: SourceId): string {
@@ -361,17 +344,10 @@ function fh_cachePath(p_directory: string, p_source: SourceId): string {
 }
 
 function fh_isMissingFileError(p_error: unknown): boolean {
-  return (
-    f_isRecord(p_error) &&
-    typeof p_error.code === "string" &&
-    p_error.code === "ENOENT"
-  );
+  return f_isRecord(p_error) && typeof p_error.code === "string" && p_error.code === "ENOENT";
 }
 
-function fh_parseTtlSeconds(
-  p_value: string | undefined,
-  p_defaultMs: number,
-): number {
+function fh_parseTtlSeconds(p_value: string | undefined, p_defaultMs: number): number {
   if (p_value === undefined || p_value.trim().length === 0) {
     return p_defaultMs;
   }

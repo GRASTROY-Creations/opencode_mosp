@@ -42,9 +42,7 @@ describe("f_parseLlbmExport", () => {
     if (!vl_result.ok) return;
 
     // Coding rows first, then intelligence rows; each sorted by source id.
-    expect(
-      vl_result.value.map((p_row) => `${p_row.benchmarkId}:${p_row.sourceModelId}`),
-    ).toEqual([
+    expect(vl_result.value.map((p_row) => `${p_row.benchmarkId}:${p_row.sourceModelId}`)).toEqual([
       "llbmCoding:anthropic/claude-fable-5",
       "llbmCoding:google/gemini-3.8-flash",
       "llbmCoding:moonshotai/kimi-k2.6",
@@ -77,16 +75,13 @@ describe("f_parseLlbmExport", () => {
     expect(vl_fableIntel?.score).toBe(49.6);
 
     // The duplicate setting row loses to the higher score.
-    const vl_sol = vl_result.value.find(
-      (p_row) => p_row.sourceModelId === "openai/gpt-5.6-sol",
-    );
+    const vl_sol = vl_result.value.find((p_row) => p_row.sourceModelId === "openai/gpt-5.6-sol");
     expect(vl_sol?.score).toBe(77.4);
 
     // Rows for other metrics (unit "usd") never enter the scored set.
     const vl_kimi = vl_result.value.find(
       (p_row) =>
-        p_row.benchmarkId === "llbmCoding" &&
-        p_row.sourceModelId === "moonshotai/kimi-k2.6",
+        p_row.benchmarkId === "llbmCoding" && p_row.sourceModelId === "moonshotai/kimi-k2.6",
     );
     expect(vl_kimi?.score).toBe(61.8);
 
@@ -117,9 +112,7 @@ describe("f_parseLlbmExport", () => {
 
     expect(vl_result.ok).toBe(true);
     if (!vl_result.ok) return;
-    expect(vl_result.value.map((p_row) => p_row.sourceModelId)).toEqual([
-      "keep/model",
-    ]);
+    expect(vl_result.value.map((p_row) => p_row.sourceModelId)).toEqual(["keep/model"]);
     expect(vl_result.warnings[0]?.code).toBe("unsupported-unit");
   });
 
@@ -134,9 +127,9 @@ describe("f_parseLlbmExport", () => {
     expect(vl_result.ok).toBe(false);
     if (vl_result.ok) return;
     expect(vl_result.error).toContain("no score rows");
-    expect(
-      vl_result.warnings.every((p_warning) => p_warning.code === "score-out-of-range"),
-    ).toBe(true);
+    expect(vl_result.warnings.every((p_warning) => p_warning.code === "score-out-of-range")).toBe(
+      true,
+    );
     expect(vl_result.warnings).toHaveLength(2);
   });
 
@@ -151,13 +144,11 @@ describe("f_parseLlbmExport", () => {
 
     expect(vl_result.ok).toBe(true);
     if (!vl_result.ok) return;
-    expect(vl_result.value.map((p_row) => p_row.sourceModelId)).toEqual([
-      "good/model",
-    ]);
+    expect(vl_result.value.map((p_row) => p_row.sourceModelId)).toEqual(["good/model"]);
     expect(vl_result.warnings).toHaveLength(2);
-    expect(
-      vl_result.warnings.every((p_warning) => p_warning.code === "malformed-score-row"),
-    ).toBe(true);
+    expect(vl_result.warnings.every((p_warning) => p_warning.code === "malformed-score-row")).toBe(
+      true,
+    );
   });
 
   test("keeps a single scored metric and fails only when none is scored", () => {
@@ -167,9 +158,7 @@ describe("f_parseLlbmExport", () => {
 
     expect(vl_intelOnly.ok).toBe(true);
     if (!vl_intelOnly.ok) return;
-    expect(vl_intelOnly.value.map((p_row) => p_row.benchmarkId)).toEqual([
-      "llbmIntelligence",
-    ]);
+    expect(vl_intelOnly.value.map((p_row) => p_row.benchmarkId)).toEqual(["llbmIntelligence"]);
 
     const vl_none = f_parseLlbmExport(
       fh_exportPayload([fh_scoreRow({ metric: "matharena_expected_cost_usd" })]),
@@ -177,9 +166,7 @@ describe("f_parseLlbmExport", () => {
 
     expect(vl_none.ok).toBe(false);
     if (vl_none.ok) return;
-    expect(vl_none.error).toBe(
-      "LLMBM returned no score rows for any supported metric",
-    );
+    expect(vl_none.error).toBe("LLMBM returned no score rows for any supported metric");
   });
 
   test("rejects malformed export structures", () => {

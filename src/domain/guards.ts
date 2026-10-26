@@ -12,8 +12,7 @@
 
 /** Successful or failed validation. The failure branch carries a safe message. */
 export type DomainResult<T> =
-  | { readonly ok: true; readonly value: T }
-  | { readonly ok: false; readonly error: string };
+  { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: string };
 
 /** A JSON object after `typeof` checking; values still need their own validation. */
 export type JsonRecord = Readonly<Record<string, unknown>>;
@@ -59,10 +58,7 @@ export function f_isNonEmptyString(p_value: unknown): p_value is string {
 }
 
 /** Parse a required, trimmed, non-empty string. */
-export function f_parseNonEmptyString(
-  p_value: unknown,
-  p_field: string,
-): DomainResult<string> {
+export function f_parseNonEmptyString(p_value: unknown, p_field: string): DomainResult<string> {
   if (!f_isNonEmptyString(p_value)) {
     return f_fail(`${p_field} must be a non-empty string`);
   }
@@ -175,16 +171,11 @@ export function f_parseNullableNonNegativeInteger(
  * and canonicalizes both to an ISO-8601 UTC string, so lexicographic and
  * chronological ordering agree.
  */
-export function f_parseTimestamp(
-  p_value: unknown,
-  p_field: string,
-): DomainResult<string> {
+export function f_parseTimestamp(p_value: unknown, p_field: string): DomainResult<string> {
   const vl_epochMs = fh_toEpochMilliseconds(p_value);
 
   if (vl_epochMs === null) {
-    return f_fail(
-      `${p_field} must be an ISO-8601 timestamp or epoch milliseconds`,
-    );
+    return f_fail(`${p_field} must be an ISO-8601 timestamp or epoch milliseconds`);
   }
 
   return f_ok(new Date(vl_epochMs).toISOString());

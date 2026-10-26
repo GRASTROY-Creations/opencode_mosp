@@ -71,8 +71,7 @@ function fh_resolveTail(
       continue;
     }
 
-    const vl_variant =
-      vl_key.slice(0, vl_index) + "." + vl_key.slice(vl_index + 1);
+    const vl_variant = vl_key.slice(0, vl_index) + "." + vl_key.slice(vl_index + 1);
     const vl_candidate = p_map.get(vl_variant);
 
     if (vl_candidate === undefined) {
@@ -212,9 +211,7 @@ async function fh_main(): Promise<number> {
   }
 
   if (vl_unmatched.length > 0) {
-    console.log(
-      "\nSUGGESTIONS for unmatched models (tails sharing a 4+ char prefix):",
-    );
+    console.log("\nSUGGESTIONS for unmatched models (tails sharing a 4+ char prefix):");
 
     const vl_all = new Map([...vl_datasetByTail, ...vl_byTail]);
 
@@ -248,9 +245,7 @@ async function fh_main(): Promise<number> {
 
   for (const vl_entry of vl_entries) {
     const vl_group =
-      vl_entry.llbmId !== null
-        ? vl_entry.llbmId.slice(0, vl_entry.llbmId.indexOf("/"))
-        : "";
+      vl_entry.llbmId !== null ? vl_entry.llbmId.slice(0, vl_entry.llbmId.indexOf("/")) : "";
 
     if (vl_group !== vl_lastGroup && vl_lastGroup !== "") {
       console.log("");

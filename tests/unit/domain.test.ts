@@ -97,12 +97,10 @@ describe("domain guards", () => {
   });
 
   test("canonicalizes epoch and ISO timestamps to UTC", () => {
-    expect(fh_unwrap(f_parseTimestamp(0, "timestamp"))).toBe(
-      "1970-01-01T00:00:00.000Z",
+    expect(fh_unwrap(f_parseTimestamp(0, "timestamp"))).toBe("1970-01-01T00:00:00.000Z");
+    expect(fh_unwrap(f_parseTimestamp("2026-10-24T12:00:00+02:00", "timestamp"))).toBe(
+      "2026-10-24T10:00:00.000Z",
     );
-    expect(
-      fh_unwrap(f_parseTimestamp("2026-10-24T12:00:00+02:00", "timestamp")),
-    ).toBe("2026-10-24T10:00:00.000Z");
     expect(f_parseTimestamp("not-a-date", "timestamp").ok).toBe(false);
     expect(fh_unwrap(f_parseNullableTimestamp(undefined, "timestamp"))).toBeNull();
     expect(fh_unwrap(f_parseNullableTimestamp("", "timestamp"))).toBeNull();
@@ -112,26 +110,22 @@ describe("domain guards", () => {
     expect(fh_unwrap(f_parseNullableNonNegativeNumber(0, "number"))).toBe(0);
     expect(f_parseNullableNonNegativeNumber(-1, "number").ok).toBe(false);
     expect(f_parseNullableNonNegativeNumber(Number.NaN, "number").ok).toBe(false);
-    expect(
-      f_parseNullableNonNegativeNumber(Number.POSITIVE_INFINITY, "number").ok,
-    ).toBe(false);
+    expect(f_parseNullableNonNegativeNumber(Number.POSITIVE_INFINITY, "number").ok).toBe(false);
     expect(f_parseNullableNonNegativeNumber("1", "number").ok).toBe(false);
     expect(fh_unwrap(f_parseNullableNonNegativeNumber(null, "number"))).toBeNull();
   });
 
   test("parses only members of the allowed string union", () => {
-    const vl_enum = fh_unwrap(
-      f_parseEnum("llbmCoding", k_benchmarkIds, "benchmarkId"),
-    );
+    const vl_enum = fh_unwrap(f_parseEnum("llbmCoding", k_benchmarkIds, "benchmarkId"));
 
     expect(vl_enum).toBe("llbmCoding");
     expect(f_parseEnum("other", k_benchmarkIds, "benchmarkId").ok).toBe(false);
   });
 
   test("accepts http(s) URLs only and preserves the original value", () => {
-    expect(
-      fh_unwrap(f_parseNullableHttpUrl("https://example.com/x", "url")),
-    ).toBe("https://example.com/x");
+    expect(fh_unwrap(f_parseNullableHttpUrl("https://example.com/x", "url"))).toBe(
+      "https://example.com/x",
+    );
     expect(f_parseNullableHttpUrl("ftp://example.com", "url").ok).toBe(false);
     expect(f_parseNullableHttpUrl("not a url", "url").ok).toBe(false);
     expect(fh_unwrap(f_parseNullableHttpUrl(null, "url"))).toBeNull();
@@ -213,13 +207,10 @@ describe("pricing contract", () => {
   });
 
   test("rejects negative prices, unknown currencies, and bad tiers", () => {
-    expect(
-      f_validateModelPricing({ ...k_validPricing, inputUsdPerMillionTokens: -0.1 })
-        .ok,
-    ).toBe(false);
-    expect(
-      f_validateModelPricing({ ...k_validPricing, currency: "EUR" }).ok,
-    ).toBe(false);
+    expect(f_validateModelPricing({ ...k_validPricing, inputUsdPerMillionTokens: -0.1 }).ok).toBe(
+      false,
+    );
+    expect(f_validateModelPricing({ ...k_validPricing, currency: "EUR" }).ok).toBe(false);
     expect(
       f_validateModelPricing({
         ...k_validPricing,
@@ -231,17 +222,13 @@ describe("pricing contract", () => {
         ],
       }).ok,
     ).toBe(false);
-    expect(
-      f_validateModelPricing({ ...k_validPricing, tiers: undefined }).ok,
-    ).toBe(false);
+    expect(f_validateModelPricing({ ...k_validPricing, tiers: undefined }).ok).toBe(false);
   });
 });
 
 describe("benchmark contract", () => {
   test("keeps the reported score and drops any legacy rank field", () => {
-    const vl_benchmark = fh_unwrap(
-      f_validateModelBenchmark({ ...k_validBenchmark, rank: 1 }),
-    );
+    const vl_benchmark = fh_unwrap(f_validateModelBenchmark({ ...k_validBenchmark, rank: 1 }));
 
     expect(vl_benchmark.score).toBe(72.5);
     expect(vl_benchmark).not.toHaveProperty("rank");
@@ -266,9 +253,7 @@ describe("benchmark contract", () => {
     );
     expect(vl_proxy.matchType).toBe("family_fallback");
 
-    expect(
-      f_validateModelBenchmark({ ...k_validBenchmark, matchType: "guessed" }).ok,
-    ).toBe(false);
+    expect(f_validateModelBenchmark({ ...k_validBenchmark, matchType: "guessed" }).ok).toBe(false);
   });
 
   test("treats zero as a real score", () => {
@@ -285,12 +270,8 @@ describe("benchmark contract", () => {
   });
 
   test("rejects scores outside 0-100", () => {
-    expect(
-      f_validateModelBenchmark({ ...k_validBenchmark, score: 101 }).ok,
-    ).toBe(false);
-    expect(
-      f_validateModelBenchmark({ ...k_validBenchmark, score: -1 }).ok,
-    ).toBe(false);
+    expect(f_validateModelBenchmark({ ...k_validBenchmark, score: 101 }).ok).toBe(false);
+    expect(f_validateModelBenchmark({ ...k_validBenchmark, score: -1 }).ok).toBe(false);
   });
 
   test("rejects inverted windows, bad URLs, and empty variants", () => {
@@ -307,12 +288,8 @@ describe("benchmark contract", () => {
         sourceUrl: "ftp://example.com/result",
       }).ok,
     ).toBe(false);
-    expect(
-      f_validateModelBenchmark({ ...k_validBenchmark, variant: "  " }).ok,
-    ).toBe(false);
-    expect(
-      f_validateModelBenchmark({ ...k_validBenchmark, benchmarkId: "other" }).ok,
-    ).toBe(false);
+    expect(f_validateModelBenchmark({ ...k_validBenchmark, variant: "  " }).ok).toBe(false);
+    expect(f_validateModelBenchmark({ ...k_validBenchmark, benchmarkId: "other" }).ok).toBe(false);
   });
 
   test("keeps LLMBM window and sample metadata", () => {
@@ -335,9 +312,7 @@ describe("benchmark contract", () => {
 
 describe("model record contract", () => {
   test("builds the stable domain key", () => {
-    expect(f_createModelId("opencode", "gpt-5-nano")).toBe(
-      "opencode/gpt-5-nano",
-    );
+    expect(f_createModelId("opencode", "gpt-5-nano")).toBe("opencode/gpt-5-nano");
   });
 
   test("validates a complete record and finds its benchmarks", () => {
@@ -371,30 +346,17 @@ describe("model record contract", () => {
     expect(
       f_validateModelRecord({
         ...k_validModel,
-        benchmarks: [
-          k_validBenchmark,
-          { ...k_validBenchmark, variant: "llbm-duplicate" },
-        ],
+        benchmarks: [k_validBenchmark, { ...k_validBenchmark, variant: "llbm-duplicate" }],
       }).ok,
     ).toBe(false);
   });
 
   test("rejects id mismatches and invalid metadata", () => {
-    expect(
-      f_validateModelRecord({ ...k_validModel, id: "opencode/other" }).ok,
-    ).toBe(false);
-    expect(
-      f_validateModelRecord({ ...k_validModel, source: "scraped" }).ok,
-    ).toBe(false);
-    expect(
-      f_validateModelRecord({ ...k_validModel, contextWindow: 0 }).ok,
-    ).toBe(false);
-    expect(
-      f_validateModelRecord({ ...k_validModel, lastUpdatedAt: "yesterday" }).ok,
-    ).toBe(false);
-    expect(
-      f_validateModelRecord({ ...k_validModel, pricing: null }).ok,
-    ).toBe(false);
+    expect(f_validateModelRecord({ ...k_validModel, id: "opencode/other" }).ok).toBe(false);
+    expect(f_validateModelRecord({ ...k_validModel, source: "scraped" }).ok).toBe(false);
+    expect(f_validateModelRecord({ ...k_validModel, contextWindow: 0 }).ok).toBe(false);
+    expect(f_validateModelRecord({ ...k_validModel, lastUpdatedAt: "yesterday" }).ok).toBe(false);
+    expect(f_validateModelRecord({ ...k_validModel, pricing: null }).ok).toBe(false);
   });
 });
 

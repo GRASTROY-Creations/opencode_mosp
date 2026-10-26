@@ -1,5 +1,5 @@
 # Bun configuration for opencode_model_overview.
-# Dependency versions are pinned exactly in package.json (see docs/development.md).
+# Dependency versions are pinned exactly in package.json (see .docs/guide/development.md).
 
 [test]
 # `bun test` discovers tests/**/*.test.ts by default; no root override needed.
