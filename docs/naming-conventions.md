@@ -17,7 +17,7 @@ Source: `docs/KNOWLEDGE_03.md` §5.1. Applied to all runtime identifiers in this
 ## Style rules
 
 - **Types / interfaces:** PascalCase (`ModelRecord`) — type declarations are exempt from runtime prefixes.
-- **String unions / enum-like members:** descriptive names (`"gpqa"`).
+- **String unions / enum-like members:** descriptive names (`"llbmCoding"`, `"family_fallback"`).
 - **Files:** kebab-case (`model-matching.ts`).
 - Prefix **every** function by role, including callbacks and class methods.
 - Prefix parameters even in short callbacks (`(p_a, p_b) => …`).

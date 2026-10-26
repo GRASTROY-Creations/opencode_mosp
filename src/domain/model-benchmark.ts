@@ -1,15 +1,19 @@
 /**
  * Normalized benchmark contract.
  *
- * The single benchmark source is LLMBM (LLM Benchmark) with the 'coding' metric.
- * Score and rank are deliberately separate values:
- * - `score` is the source's reported value on a 0-100 percent scale.
- * - `rank` is a 1-based position under the selected benchmark's ranking rules.
- *   It is `null` when no defensible rank can be computed.
+ * The single benchmark source is LLMBM (LLMBenchmark.ai `/v1/export`). Two of
+ * its metrics are shown side by side, each as its own benchmark id
+ * (Adjustment 22):
+ * - `llbmCoding`       — `aa_coding_index` (Artificial Analysis coding index);
+ * - `llbmIntelligence` — `aa_intelligence_index` (Artificial Analysis
+ *   intelligence index).
  *
- * A model without a benchmark result has **no entry** in the record's
- * `benchmarks` array. Do not insert an entry full of nulls, and never use 0 as
- * a stand-in for "not evaluated".
+ * Only the source's reported value is kept (0-100 percent scale). Ranks are
+ * deliberately not derived: the overview shows metric values, not positions.
+ *
+ * A model without a result for a benchmark has **no entry** for it in the
+ * record's `benchmarks` array. Do not insert an entry full of nulls, and never
+ * use 0 as a stand-in for "not evaluated".
  */
 
 import {
@@ -21,41 +25,39 @@ import {
   f_parseNullableHttpUrl,
   f_parseNullableNonNegativeInteger,
   f_parseNullableNonNegativeNumber,
-  f_parseNullablePositiveInteger,
   f_parseNullableString,
   f_parseNullableTimestamp,
   type DomainResult,
 } from "./guards";
 
-/** The single benchmark supported. */
-export type BenchmarkId = "llbm";
+/** Supported benchmarks: one per displayed LLMBM metric. */
+export type BenchmarkId = "llbmCoding" | "llbmIntelligence";
 
-/** Runtime list used by parsers and UI selectors. */
+/** Runtime list in display order; used by parsers, sorting, and the UI. */
 export const k_benchmarkIds: readonly BenchmarkId[] = [
-  "llbm",
+  "llbmCoding",
+  "llbmIntelligence",
 ];
 
-/** The LLMBM metric (coding, overall, etc.). */
-export const k_llbmMetric = "coding";
+/** LLMBM export metric backing each benchmark id. */
+export const k_llbmMetricByBenchmark: Readonly<Record<BenchmarkId, string>> = {
+  llbmCoding: "aa_coding_index",
+  llbmIntelligence: "aa_intelligence_index",
+};
 
 /**
  * How a benchmark row relates to a registry model.
  *
- * `exact`/`alias` describe the model itself; `family_fallback` describes a
- * sibling version/family entry used as a stand-in and must never be presented
- * as the model's own score (the UI marks those rows with `~`).
+ * `exact` describes the model itself; `family_fallback` describes a sibling
+ * version/family entry used as a stand-in and must never be presented as the
+ * model's own score (the UI marks those values with `~`).
  */
-export type BenchmarkMatchType = "exact" | "alias" | "family_fallback";
+export type BenchmarkMatchType = "exact" | "family_fallback";
 
 export const k_benchmarkMatchTypes: readonly BenchmarkMatchType[] = [
   "exact",
-  "alias",
   "family_fallback",
 ];
-
-export function f_isBenchmarkMatchType(p_value: unknown): p_value is BenchmarkMatchType {
-  return k_benchmarkMatchTypes.some((p_type) => p_type === p_value);
-}
 
 function fh_parseNullableMatchType(
   p_value: unknown,
@@ -70,25 +72,22 @@ function fh_parseNullableMatchType(
 /** One normalized benchmark result for one model. */
 export interface ModelBenchmark {
   readonly benchmarkId: BenchmarkId;
-  /** Source subset/protocol identifier, e.g. `llbm-coding`. */
+  /** Source subset/protocol identifier, e.g. `llbm-aa_coding_index`. */
   readonly variant: string;
   /** Reported score on a 0-100 percent scale; `null` if unavailable. */
   readonly score: number | null;
   readonly scoreUnit: "percent";
-  /** 1-based rank; `null` until computed or supplied with defensible semantics. */
-  readonly rank: number | null;
   /** Number of evaluated samples; `null` when the source does not report it. */
   readonly sampleCount: number | null;
   /** Start of the evaluation window (ISO-8601 UTC); `null` when not applicable. */
   readonly windowStart: string | null;
   /** End of the evaluation window (ISO-8601 UTC); `null` when not applicable. */
   readonly windowEnd: string | null;
-  /** Raw identifier used by the benchmark source (for troubleshooting/aliases). */
+  /** Raw identifier used by the benchmark source (matching/troubleshooting). */
   readonly sourceModelId: string | null;
   /**
    * How this row was tied to a registry model. Sources create rows with `null`;
-   * the matcher assigns the kind on attach. Older cached rows validate back to
-   * `null`.
+   * the matcher assigns the kind on attach.
    */
   readonly matchType: BenchmarkMatchType | null;
   /** Public result page or data file; `null` if unavailable. */
@@ -147,15 +146,6 @@ export function f_validateModelBenchmark(
 
   if (!vl_score.ok) {
     return vl_score;
-  }
-
-  const vl_rank = f_parseNullablePositiveInteger(
-    p_value.rank,
-    "benchmark.rank",
-  );
-
-  if (!vl_rank.ok) {
-    return vl_rank;
   }
 
   const vl_sampleCount = f_parseNullableNonNegativeInteger(
@@ -231,7 +221,6 @@ export function f_validateModelBenchmark(
     variant: vl_variant.value,
     score: vl_score.value,
     scoreUnit: "percent",
-    rank: vl_rank.value,
     sampleCount: vl_sampleCount.value,
     windowStart: vl_windowStart.value,
     windowEnd: vl_windowEnd.value,

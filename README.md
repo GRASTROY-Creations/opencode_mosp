@@ -1,2 +1,46 @@
 # opencode_model_overview
-OpenCode LLM Models Ranking Overview Plugin
+
+OpenCode plugin (`/mosp`) that shows a sortable overview of the models
+available to your OpenCode installation: provider, context window, input/output
+price (USD per 1M tokens), and two LLMBenchmark.ai scores — the Artificial
+Analysis **coding index** and **intelligence index**.
+
+- Version 0.1.0 · MIT · GRASTROY Creations
+- Target: OpenCode 2.1.4 (`@opencode/plugin` 2.1.4), Bun 1.4.x
+
+## Data sources
+
+| Data | Source | Notes |
+|---|---|---|
+| Models, names, context, prices | OpenCode model registry (host catalog) | Authoritative; read on every panel mount |
+| Coding / Intel scores | [LLMBenchmark.ai](https://llmbenchmark.ai) `/v1/export` (`aa_coding_index`, `aa_intelligence_index`) | Attached through reviewed mappings in `src/config/llbm-mappings.ts` |
+| Crosswalk (not displayed) | [models.dev](https://models.dev) `api.json` | Cached for future mapping work |
+
+Missing values render as `—` and are never fabricated. A `~` prefix marks a
+score borrowed from a sibling model (e.g. a `-free` variant shown with its paid
+model's score). No ranks are computed; only reported values are shown.
+
+## Usage
+
+The panel opens with `/mosp` (or `/mosp toggle`). Other commands:
+
+- `/mosp update` — fetch all sources (the only network path)
+- `/mosp redraw` — re-read host catalog + cache and repaint
+- `/mosp status` — per-source freshness dialog
+- `/mosp sort <column>` — e.g. `coding`, `intel`, `ctx`, `input-price`, `output-price`
+
+Click a column header to sort; clicking again flips the direction. The
+`[update]` button at the right end of the filter row does the same as
+`/mosp update` — use it when the panel opens without models.
+
+## Development
+
+```bash
+bun install
+bun run check
+```
+
+`bun run check` runs typecheck, lint, and tests (no network). The mapping
+scripts `bun run validate:mappings` and `bun run generate:mappings` need
+network access. See `docs/development.md` for setup and environment variables,
+and `docs/architecture/` plus `docs/api/` for design and source details.

@@ -1,8 +1,10 @@
 # models.dev (provider catalog)
 
-**Status: VERIFIED (2026-10-25).** Owner directive for this source (verbatim):
-"name, cost, context allwas from OpenCode registry; model-ids can be used from
-models.dev for mapping properly to huggingface-gpqa and livecodebench".
+**Status: VERIFIED (2026-10-25).** Owner directive for this source (verbatim,
+Adjustment 16 — written when GPQA/LiveCodeBench were still the benchmark
+sources; today the benchmark source is LLMBM): "name, cost, context allwas
+from OpenCode registry; model-ids can be used from models.dev for mapping
+properly to huggingface-gpqa and livecodebench".
 
 ## Endpoint
 
@@ -45,9 +47,10 @@ benchmark mappings (source ID ↔ family ↔ registry ID).
 
 ## Mapping validation status (2026-10-25)
 
-- Benchmark mappings moved to `src/config/llbm-mappings.ts` and were
-  rebuilt entry-by-entry against the live LLMBM dataset on 2026-10-25
-  (79 of 82 catalog models carry a source ID; see `docs/api/llmbenchmark.md`).
+- Benchmark mappings live in `src/config/llbm-mappings.ts`, rebuilt
+  entry-by-entry against the live LLMBM dataset (2026-10-26: 80 of 82 catalog
+  models carry a source ID, 74 with a value; see `docs/api/llmbenchmark.md`).
+  The models.dev crosswalk is not used by them.
 - KNOWLEDGE_06 candidate IDs checked against models.dev: all five `openai/*`
   model IDs exist (`gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo`, `o1`, `o3-mini`),
   but the anthropic/deepseek/google ID strings do **not** exist under those

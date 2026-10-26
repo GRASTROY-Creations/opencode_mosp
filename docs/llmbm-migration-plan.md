@@ -1,5 +1,16 @@
 # LLMBM Migration Plan (Adjustment 19)
 
+> **Historical — superseded.** This is the pre-implementation plan and is kept
+> as a record only. Several details never shipped or were later replaced:
+> the `/v1/scores?metric=coding` endpoint is dead (the adapter uses
+> `/v1/export`, Adjustment 20); files are named `llbm.ts` /
+> `llbm-mappings.ts` (`LlbmMapping`, `llbmId`), not `llmbm*`; the
+> `validate:mappings` script was kept and extended; ranks were dropped and two
+> metric columns (`aa_coding_index`, `aa_intelligence_index`) replaced the
+> single LLMBM column (Adjustment 22). The current design is described in
+> `docs/api/llmbenchmark.md`, `docs/architecture/data-flow.md`, and
+> `docs/PLAN.md`.
+
 ## Overview
 Replace GPQA + LiveCodeBench dual-column benchmark system with a single **LLMBM** column sourced from `api.llmbenchmark.ai/v1/scores?metric=coding`. This is a clean break — GPQA and LCB are fully removed.
 

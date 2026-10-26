@@ -6,10 +6,12 @@ import {
   f_buildSidebarSummary,
   f_buildStatusLine,
   f_buildStatusLines,
+  f_buildEmptyMessage,
   f_buildTableLines,
   f_createOverviewController,
   f_describeSnapshot,
   f_formatChipLabel,
+  f_formatUpdateLabel,
   f_getSortKeyLabel,
   f_parseOverviewCommand,
   k_overviewUsage,
@@ -17,7 +19,7 @@ import {
 } from "./ui/panel-controller";
 
 /**
- * Model Overview — TUI entrypoint (Phase 6).
+ * Model Overview — TUI entrypoint.
  *
  * The panel is a pure renderer over `src/ui/panel-controller.ts`:
  * - model data is read host-first: the live OpenCode location catalog wins
@@ -70,7 +72,8 @@ const k_columns: readonly OverviewColumn[] = [
   { key: "contextWindow", label: "Ctx", width: 6 },
   { key: "inputPrice", label: "In $/M", width: 10 },
   { key: "outputPrice", label: "Out $/M", width: 10 },
-  { key: "llbmRank", label: "LLMBM", width: 11 },
+  { key: "codingScore", label: "Coding", width: 8 },
+  { key: "intelligenceScore", label: "Intel", width: 8 },
 ];
 
 /**
@@ -79,8 +82,8 @@ const k_columns: readonly OverviewColumn[] = [
  */
 function fh_visibleColumns(p_width: number): readonly OverviewColumn[] {
   return k_columns.filter((p_column) => {
-    if (p_column.key === "contextWindow") return p_width >= 92;
-    if (p_column.key === "providerName") return p_width >= 76;
+    if (p_column.key === "contextWindow") return p_width >= 98;
+    if (p_column.key === "providerName") return p_width >= 82;
     return true;
   });
 }
@@ -88,6 +91,8 @@ function fh_visibleColumns(p_width: number): readonly OverviewColumn[] {
 function ModelOverviewPanel(props: {
   readonly input: PanelView;
   readonly controller: OverviewController;
+  /** Toolbar `[update]` action; same path as `/mosp update` (toasts included). */
+  readonly onUpdate: () => void;
 }) {
   const context = usePlugin();
   // All values are read once per mount; a controller mutation remounts the
@@ -100,6 +105,7 @@ function ModelOverviewPanel(props: {
   const vl_tableLines = f_buildTableLines(vl_rows.rows, vl_visibleColumns);
   const vl_sortKey = props.controller.sortKey();
   const vl_sortDirection = props.controller.sortDirection();
+  const vl_loading = props.controller.loading();
   const fh_chipColor = (p_active: boolean) =>
     p_active ? context.theme.text.base : context.theme.text.faint;
   // Activation is press-and-release on the same target: the host dispatches
@@ -151,17 +157,32 @@ function ModelOverviewPanel(props: {
               : "Model Overview"}
           </text>
           <text fg={context.theme.text.faint}>
-            {`${vl_modelCount} models${props.controller.loading() ? " · refreshing…" : ""}`}
+            {`${vl_modelCount} models${vl_loading ? " · refreshing…" : ""}`}
           </text>
         </box>
         <Show when={!vl_collapsed}>
-          <box flexDirection="row" gap={1} paddingLeft={1}>
+          <box flexDirection="row" gap={1} paddingLeft={1} paddingRight={1}>
             <box
               onMouseDown={() => fh_beginPress("chip-free")}
               onMouseUp={() => fh_endPress("chip-free", props.controller.toggleFreeOnly)}
             >
               <text fg={fh_chipColor(vl_filters.freeOnly)}>
-                {f_formatChipLabel(vl_filters.freeOnly, false, "free")}
+                {f_formatChipLabel(vl_filters.freeOnly, "free")}
+              </text>
+            </box>
+            {/* Spacer pushes the update button to the right edge. */}
+            <box flexGrow={1} />
+            <box
+              onMouseDown={() => fh_beginPress("chip-update")}
+              onMouseUp={() =>
+                fh_endPress("chip-update", () => {
+                  // Presses during a running update are ignored (refresh is deduplicated too).
+                  if (!vl_loading) props.onUpdate();
+                })
+              }
+            >
+              <text fg={vl_loading ? context.theme.text.faint : context.theme.text.base}>
+                {f_formatUpdateLabel(vl_loading)}
               </text>
             </box>
           </box>
@@ -194,9 +215,7 @@ function ModelOverviewPanel(props: {
             <box flexDirection="column">
               <Show when={vl_rows.filteredCount === 0}>
                 <text fg={context.theme.text.muted}>
-                  {vl_rows.totalCount === 0
-                    ? "No cached models — run /mosp update"
-                    : "No models match the current filters"}
+                  {f_buildEmptyMessage(vl_rows.totalCount)}
                 </text>
               </Show>
               <text fg={context.theme.text.base}>{vl_tableLines.join("\n")}</text>
@@ -206,7 +225,7 @@ function ModelOverviewPanel(props: {
             <text fg={context.theme.text.faint}>
               {f_buildStatusLine(
                 props.controller.snapshot(),
-                props.controller.loading(),
+                vl_loading,
                 props.controller.lastError(),
               )}
             </text>
@@ -220,7 +239,7 @@ function ModelOverviewPanel(props: {
 function SidebarStatus(props: { readonly controller: OverviewController }) {
   const context = usePlugin();
   const vl_summary = f_buildSidebarSummary(
-    props.controller.rankingLeader(),
+    props.controller.leader(),
     props.controller.snapshot()?.models.length ?? 0,
   );
   const vl_panel = context.ui.panel.current() === undefined ? "closed" : "open";
@@ -231,11 +250,11 @@ function SidebarStatus(props: { readonly controller: OverviewController }) {
   );
 }
 
-function f_setup(context: Plugin.Context): () => void {
+function fh_setup(context: Plugin.Context): () => void {
   const controller = f_createOverviewController(context, k_panelName);
   void controller.loadSnapshot();
 
-  function f_togglePanel(): void {
+  function fh_togglePanel(): void {
     const vl_current = context.ui.panel.current();
     if (vl_current?.name === k_panelName) {
       context.ui.panel.close();
@@ -252,7 +271,7 @@ function f_setup(context: Plugin.Context): () => void {
     }
   }
 
-  async function f_updateDataWithToast(): Promise<void> {
+  async function fh_updateDataWithToast(): Promise<void> {
     const vl_snapshot = await controller.refresh(true);
     if (vl_snapshot === undefined) {
       context.ui.toast.show({
@@ -265,7 +284,7 @@ function f_setup(context: Plugin.Context): () => void {
     context.ui.toast.show({ title: "Model overview", message: f_describeSnapshot(vl_snapshot) });
   }
 
-  function f_showStatus(): void {
+  function fh_showStatus(): void {
     const vl_lines = f_buildStatusLines(
       controller.snapshot(),
       controller.rows(),
@@ -280,7 +299,7 @@ function f_setup(context: Plugin.Context): () => void {
     });
   }
 
-  function f_runCommand(raw?: string): void {
+  function fh_runCommand(raw?: string): void {
     const vl_command = f_parseOverviewCommand(raw ?? "");
     if (vl_command === undefined) {
       context.ui.toast.show({
@@ -292,13 +311,13 @@ function f_setup(context: Plugin.Context): () => void {
     }
     switch (vl_command.kind) {
       case "toggle":
-        f_togglePanel();
+        fh_togglePanel();
         return;
       case "status":
-        f_showStatus();
+        fh_showStatus();
         return;
       case "update":
-        void f_updateDataWithToast();
+        void fh_updateDataWithToast();
         return;
       case "redraw":
         void controller.loadSnapshot();
@@ -322,7 +341,13 @@ function f_setup(context: Plugin.Context): () => void {
   const vl_disposePanel = context.ui.slot({
     append: "session.panel",
     render: (input) => (
-      <ModelOverviewPanel input={input} controller={controller} />
+      <ModelOverviewPanel
+        input={input}
+        controller={controller}
+        onUpdate={() => {
+          void fh_updateDataWithToast();
+        }}
+      />
     ),
   });
   const vl_disposeSidebar = context.ui.slot({
@@ -339,21 +364,21 @@ function f_setup(context: Plugin.Context): () => void {
         group: "Model overview",
         palette: true,
         suggested: true,
-        run: f_togglePanel,
+        run: fh_togglePanel,
       },
       {
         id: "model_overview.status",
         title: "Model overview: status",
         group: "Model overview",
         palette: true,
-        run: f_showStatus,
+        run: fh_showStatus,
       },
       {
         id: "model_overview.update",
         title: "Model overview: update data",
         group: "Model overview",
         palette: true,
-        run: f_updateDataWithToast,
+        run: fh_updateDataWithToast,
       },
       {
         id: "model_overview.redraw",
@@ -369,7 +394,7 @@ function f_setup(context: Plugin.Context): () => void {
         title: "Model overview: run command",
         group: "Model overview",
         slash: { name: "mosp", arguments: true },
-        run: f_runCommand,
+        run: fh_runCommand,
       },
     ],
   }));
@@ -380,4 +405,4 @@ function f_setup(context: Plugin.Context): () => void {
   };
 }
 
-export default Plugin.define({ id: "opencode_model_overview.tui", setup: f_setup });
+export default Plugin.define({ id: "opencode_model_overview.tui", setup: fh_setup });

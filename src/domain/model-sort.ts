@@ -1,28 +1,22 @@
 /**
- * Sort and ranking unions shared by the UI, commands, and persistence.
+ * Sort vocabulary shared by the UI, commands, and persistence.
  *
- * The comparator itself lives in Phase 4 (`ranking.ts`). This module only
- * defines the vocabulary and the defaults mandated by the specification:
- * primary sort `llbmRank`, ascending, LLMBM as the primary ranking mode.
+ * The comparator lives in `src/services/ranking.ts`; this module only defines
+ * the sort keys, directions, and defaults. The default view lists the highest
+ * LLMBM coding index first.
  */
-
-/** The single benchmark that drives the rank column and ranking selector. */
-export type RankingMode = "llbm";
 
 /** Direction of the active sort column. */
 export type SortDirection = "asc" | "desc";
 
-/**
- * Every sortable column. Score and rank keys are intentionally distinct:
- * "higher score" and "rank 1 first" are different operations.
- */
+/** Every sortable column. Benchmark keys sort by the reported score. */
 export type ModelSortKey =
   | "name"
   | "providerName"
   | "releaseDate"
   | "contextWindow"
-  | "llbmScore"
-  | "llbmRank"
+  | "codingScore"
+  | "intelligenceScore"
   | "inputPrice"
   | "outputPrice";
 
@@ -32,37 +26,24 @@ export const k_modelSortKeys: readonly ModelSortKey[] = [
   "providerName",
   "releaseDate",
   "contextWindow",
-  "llbmScore",
-  "llbmRank",
+  "codingScore",
+  "intelligenceScore",
   "inputPrice",
   "outputPrice",
-];
-
-/** Registry of ranking modes. */
-export const k_rankingModes: readonly RankingMode[] = [
-  "llbm",
 ];
 
 /** Registry of sort directions. */
 export const k_sortDirections: readonly SortDirection[] = ["asc", "desc"];
 
-/** Specification default: rank by LLMBM. */
-export const k_defaultRankingMode: RankingMode = "llbm";
+/** Default sort: LLMBM coding index. */
+export const k_defaultSortKey: ModelSortKey = "codingScore";
 
-/** Specification default: LLMBM rank ascending (rank 1 first). */
-export const k_defaultSortKey: ModelSortKey = "llbmRank";
-
-/** Specification default direction for the primary sort. */
-export const k_defaultSortDirection: SortDirection = "asc";
+/** Default direction: highest score first. */
+export const k_defaultSortDirection: SortDirection = "desc";
 
 /** True when the value is a supported sort key. */
 export function f_isModelSortKey(p_value: unknown): p_value is ModelSortKey {
   return k_modelSortKeys.some((p_entry) => p_entry === p_value);
-}
-
-/** True when the value is a supported ranking mode. */
-export function f_isRankingMode(p_value: unknown): p_value is RankingMode {
-  return k_rankingModes.some((p_entry) => p_entry === p_value);
 }
 
 /** True when the value is a supported sort direction. */

@@ -27,7 +27,7 @@ the reference for what is stored, where it lives, and how staleness is handled.
 | Source key | Payload | Written by | Default TTL |
 |---|---|---|---|
 | `opencode-models` | `ModelRecord[]` from the registry adapter (fallback for host-first reads) | model refresh | 1 hour |
-| `llbm` | `ModelBenchmark[]` (LLMBM export, metric `aa_coding_index` unless `OPENCODE_LLM_BENCH_METRIC` overrides) | LLMBM refresh | 6 hours |
+| `llbm` | `ModelBenchmark[]` (LLMBM export: `llbmCoding` rows from `aa_coding_index` plus `llbmIntelligence` rows from `aa_intelligence_index`, one entry for both) | LLMBM refresh | 6 hours |
 | `models-dev` | `ModelsDevCrosswalk` (`opencode/<modelId>` → name/family/release date) | models.dev refresh | 6 hours |
 
 `opencode-pricing` is a **derived status view**, not a cache entry: the
@@ -47,7 +47,7 @@ Each entry is stored as a versioned envelope:
 
 ```jsonc
 {
-  "schemaVersion": 1,          // k_cacheSchemaVersion
+  "schemaVersion": 2,          // k_cacheSchemaVersion (2 since Adjustment 22: two benchmark ids, no rank)
   "source": "llbm",             // must match the file/key
   "fetchedAt": "2026-10-24T12:00:00.000Z",
   "ttlMs": 21600000,
@@ -101,8 +101,8 @@ environment for tests and tooling.
    write the cache entry.
 5. On failure or an empty payload: keep the previous value, mark `stale` when a
    value exists, `error` otherwise, and record a sanitized error.
-6. Merge model sources, attach matched benchmarks, recompute ranks, and build
-   status.
+6. Merge model sources, attach matched benchmarks (scores only; no ranks are
+   derived), and build status.
 
 Concurrent refreshes for the same cache key share one in-flight promise, so
 repeated clicks or commands never multiply requests.

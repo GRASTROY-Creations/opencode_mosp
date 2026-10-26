@@ -1,11 +1,11 @@
 /**
- * Small builder shared by the Phase 4 service tests. Values are explicit
+ * Small builders shared by the service tests. Values are explicit
  * defaults, not fixtures from a live source: tests should fail if a missing
  * value silently turns into a zero.
  */
 
 import {
-  k_llbmMetric,
+  k_llbmMetricByBenchmark,
   type BenchmarkId,
   type ModelBenchmark,
 } from "../../src/domain/model-benchmark";
@@ -68,10 +68,9 @@ export function f_createTestBenchmark(
 ): ModelBenchmark {
   return {
     benchmarkId: p_benchmarkId,
-    variant: k_llbmMetric,
+    variant: `llbm-${k_llbmMetricByBenchmark[p_benchmarkId]}`,
     score: p_score,
     scoreUnit: "percent",
-    rank: null,
     sampleCount: null,
     windowStart: null,
     windowEnd: null,

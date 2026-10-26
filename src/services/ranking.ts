@@ -1,15 +1,13 @@
 /**
- * Pure sorting and rank derivation. No TUI, network, or cache dependencies.
+ * Pure sorting. No TUI, network, or cache dependencies.
  *
  * Missing values always stay last, in both directions. A tie is broken by the
- * stable model ID so repeated sorts are deterministic. Score and rank remain
- * distinct columns: rank 1 first is not the same operation as highest score
- * first, even though both are derived from the same benchmark.
+ * stable model ID so repeated sorts are deterministic. Benchmark columns sort
+ * by the reported score; no ranks are derived (Adjustment 22).
  */
 
 import {
   f_findBenchmark,
-  k_benchmarkIds,
   type BenchmarkId,
 } from "../domain/model-benchmark";
 import type { ModelRecord } from "../domain/model-record";
@@ -66,94 +64,6 @@ export function f_sortModels(
   );
 }
 
-/**
- * Derive ranks from normalized scores for every benchmark.
- *
- * Uses competition ranking: equal scores share a rank and the next distinct
- * score skips positions (1, 1, 3). Ties are ordered by model ID only for
- * deterministic traversal; they still receive the same rank. A benchmark with
- * no score keeps `rank: null`. Existing source ranks are overwritten because
- * published source ranks (the old GPQA table mixed subsets) are not trusted —
- * LLMBM rows arrive with `rank: null` anyway.
- */
-export function f_assignBenchmarkRanks(
-  p_models: readonly ModelRecord[],
-): readonly ModelRecord[] {
-  const vl_ranks = new Map<string, Map<BenchmarkId, number>>();
-
-  for (const vl_benchmarkId of k_benchmarkIds) {
-    const vl_scored: { readonly modelId: string; readonly score: number }[] = [];
-
-    for (const vl_model of p_models) {
-      const vl_benchmark = f_findBenchmark(
-        vl_model.benchmarks,
-        vl_benchmarkId,
-      );
-
-      if (vl_benchmark !== null && vl_benchmark.score !== null) {
-        vl_scored.push({
-          modelId: vl_model.id,
-          score: vl_benchmark.score,
-        });
-      }
-    }
-
-    vl_scored.sort(
-      (p_left, p_right) =>
-        p_right.score - p_left.score ||
-        fh_compareIds(p_left.modelId, p_right.modelId),
-    );
-
-    let vl_previousScore: number | null = null;
-    let vl_previousRank = 0;
-
-    for (const [vl_index, vl_entry] of vl_scored.entries()) {
-      const vl_rank =
-        vl_entry.score === vl_previousScore ? vl_previousRank : vl_index + 1;
-
-      vl_previousScore = vl_entry.score;
-      vl_previousRank = vl_rank;
-
-      const vl_modelRanks =
-        vl_ranks.get(vl_entry.modelId) ?? new Map<BenchmarkId, number>();
-      vl_modelRanks.set(vl_benchmarkId, vl_rank);
-      vl_ranks.set(vl_entry.modelId, vl_modelRanks);
-    }
-  }
-
-  return p_models.map((p_model) => {
-    const vl_modelRanks = vl_ranks.get(p_model.id);
-    let vl_changed = false;
-
-    const vl_benchmarks = p_model.benchmarks.map((p_benchmark) => {
-      const vl_rank =
-        p_benchmark.score === null
-          ? null
-          : (vl_modelRanks?.get(p_benchmark.benchmarkId) ?? null);
-
-      if (vl_rank === p_benchmark.rank) {
-        return p_benchmark;
-      }
-
-      vl_changed = true;
-
-      return {
-        ...p_benchmark,
-        rank: vl_rank,
-      };
-    });
-
-    if (!vl_changed) {
-      return p_model;
-    }
-
-    return {
-      ...p_model,
-      benchmarks: vl_benchmarks,
-    };
-  });
-}
-
 function fh_getSortValue(
   p_model: ModelRecord,
   p_key: ModelSortKey,
@@ -177,11 +87,11 @@ function fh_getSortValue(
     case "outputPrice":
       return p_model.pricing.outputUsdPerMillionTokens;
 
-    case "llbmScore":
-      return fh_getBenchmarkValue(p_model, "llbm", "score");
+    case "codingScore":
+      return fh_getBenchmarkScore(p_model, "llbmCoding");
 
-    case "llbmRank":
-      return fh_getBenchmarkValue(p_model, "llbm", "rank");
+    case "intelligenceScore":
+      return fh_getBenchmarkScore(p_model, "llbmIntelligence");
 
     default: {
       const vl_exhaustiveCheck: never = p_key;
@@ -190,18 +100,11 @@ function fh_getSortValue(
   }
 }
 
-function fh_getBenchmarkValue(
+function fh_getBenchmarkScore(
   p_model: ModelRecord,
   p_benchmarkId: BenchmarkId,
-  p_field: "score" | "rank",
 ): number | null {
-  const vl_benchmark = f_findBenchmark(p_model.benchmarks, p_benchmarkId);
-
-  if (vl_benchmark === null) {
-    return null;
-  }
-
-  return p_field === "score" ? vl_benchmark.score : vl_benchmark.rank;
+  return f_findBenchmark(p_model.benchmarks, p_benchmarkId)?.score ?? null;
 }
 
 function fh_compareValues(

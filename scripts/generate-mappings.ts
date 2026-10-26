@@ -1,40 +1,34 @@
 /**
  * Regenerate `k_llbmMappings` (src/config/llbm-mappings.ts) from live data.
  *
- * Reads the LLMBenchmark.ai `/v1/export` payload for the selected metric
- * (OPENCODE_LLM_BENCH_METRIC, default aa_coding_index), reads the live
- * OpenCode location catalog via `opencode api get`, and matches catalog
- * model IDs against dataset model identifiers by their tail after the last
- * "/":
+ * Reads the LLMBenchmark.ai `/v1/export` payload (both displayed metrics:
+ * `aa_coding_index` and `aa_intelligence_index`) and the live OpenCode
+ * location catalog via `opencode api get`, then matches catalog model IDs
+ * against dataset model identifiers by their tail after the last "/":
  * - tail equal to the model ID (case-insensitive) -> "exact";
  * - a dash replaced by a dot at one version boundary (e.g.
  *   `claude-opus-4-8` -> `claude-opus-4.8`), resolving to exactly one live
  *   id -> "exact" (Adjustment 21 dot equivalence, owner-approved);
  * - model ID ends "-free" and the stem resolves by either rule above
  *   -> "family_fallback";
- * - ids that exist in `dataset.models` but have no row for this metric are
- *   still adopted and reported as PENDING (they attach automatically once
- *   scored — see `bun run validate:mappings`);
+ * - ids scored in at least one metric are preferred; ids that exist in
+ *   `dataset.models` without any score are still adopted and reported as
+ *   PENDING (they attach automatically once scored);
  * - otherwise the entry gets `llbmId: null` and the script prints near-miss
  *   suggestions for manual review.
  *
- * Review the emitted table (sibling proxies such as codex variants pointing
- * at a base model are added manually to the config after owner review, not
- * generated here).
+ * Reviewed-only proxies (codex variants pointing at a base model, renamed
+ * rebrands such as `beam-free`) are added manually after owner review and
+ * are never generated here.
  *
  * Run: `bun run generate:mappings` (requires network + a running service).
  * The emitted TypeScript block must be reviewed and pasted into
  * src/config/llbm-mappings.ts; nothing here writes source files.
  */
 
-import { f_isRecord } from "../src/domain/guards";
-import {
-  f_parseLlbmExport,
-  f_resolveLlbmMetric,
-  k_llbmExportUrl,
-} from "../src/providers/llbm";
-import { f_fetchJsonWithRetry } from "../src/utils/fetch-json";
+import { f_fetchLiveLlbmState, f_liveCatalogIds } from "./live-data";
 
+/** A live dataset id plus its display score (coding, else intelligence). */
 interface TailTarget {
   readonly llbmId: string;
   readonly score: number | null;
@@ -46,42 +40,6 @@ interface GeneratedEntry {
   readonly matchType: "exact" | "family_fallback";
   readonly score: number | null;
   readonly kind: string;
-}
-
-function fh_liveCatalogIds(): string[] | null {
-  const vl_path = `/api/model?location%5Bdirectory%5D=${encodeURIComponent(process.cwd())}`;
-  const vl_spawn = Bun.spawnSync(["opencode", "api", "get", vl_path], {
-    stdout: "pipe",
-    stderr: "ignore",
-  });
-
-  if (vl_spawn.exitCode !== 0) {
-    return null;
-  }
-
-  let vl_parsed: unknown;
-  try {
-    vl_parsed = JSON.parse(vl_spawn.stdout.toString()) as unknown;
-  } catch {
-    return null;
-  }
-
-  if (!f_isRecord(vl_parsed) || !Array.isArray(vl_parsed.data)) {
-    return null;
-  }
-
-  const vl_ids: string[] = [];
-
-  for (const vl_raw of vl_parsed.data as readonly unknown[]) {
-    if (!f_isRecord(vl_raw)) continue;
-    const vl_provider = vl_raw.providerID;
-    const vl_model = vl_raw.modelID;
-    if (typeof vl_provider === "string" && typeof vl_model === "string") {
-      vl_ids.push(`${vl_provider}/${vl_model}`);
-    }
-  }
-
-  return vl_ids.length > 0 ? vl_ids : null;
 }
 
 function fh_tail(p_llbmId: string): string {
@@ -131,39 +89,30 @@ function fh_resolveTail(
   return vl_found;
 }
 
-function fh_datasetModelTargets(p_payload: unknown): Map<string, TailTarget> {
-  const vl_map = new Map<string, TailTarget>();
+/** Resolve the model id directly, then its `-free` stem as a fallback. */
+function fh_resolveWithFree(
+  p_map: ReadonlyMap<string, TailTarget>,
+  p_modelId: string,
+): { readonly target: TailTarget; readonly matchType: "exact" | "family_fallback" } | undefined {
+  const vl_direct = fh_resolveTail(p_map, p_modelId);
 
-  const vl_dataset = f_isRecord(p_payload) ? p_payload.dataset : undefined;
-
-  if (!f_isRecord(vl_dataset) || !Array.isArray(vl_dataset.models)) {
-    return vl_map;
+  if (vl_direct !== undefined) {
+    return { target: vl_direct, matchType: "exact" };
   }
 
-  for (const vl_model of vl_dataset.models as readonly unknown[]) {
-    if (!f_isRecord(vl_model) || typeof vl_model.id !== "string") {
-      continue;
-    }
-
-    const vl_key = fh_tail(vl_model.id).toLowerCase();
-
-    if (!vl_map.has(vl_key)) {
-      vl_map.set(vl_key, { llbmId: vl_model.id, score: null });
-    }
+  if (!p_modelId.endsWith("-free")) {
+    return undefined;
   }
 
-  return vl_map;
+  const vl_stem = fh_resolveTail(p_map, p_modelId.slice(0, -5));
+  return vl_stem === undefined ? undefined : { target: vl_stem, matchType: "family_fallback" };
 }
 
-async function f_main(): Promise<number> {
-  const vl_metric = f_resolveLlbmMetric();
-  console.log(`metric: ${vl_metric}`);
+async function fh_main(): Promise<number> {
+  let vl_live: Awaited<ReturnType<typeof f_fetchLiveLlbmState>>;
 
-  let vl_payload: unknown;
   try {
-    vl_payload = await f_fetchJsonWithRetry(k_llbmExportUrl, {
-      timeoutMs: 120_000,
-    });
+    vl_live = await f_fetchLiveLlbmState();
   } catch (p_error) {
     console.log(
       `LLMBM export unavailable: ${p_error instanceof Error ? p_error.message : "request failed"}`,
@@ -171,32 +120,33 @@ async function f_main(): Promise<number> {
     return 1;
   }
 
-  const vl_parsed = f_parseLlbmExport(vl_payload, vl_metric);
+  const vl_coding = vl_live.scores.get("llbmCoding") ?? new Map<string, number>();
+  const vl_intel = vl_live.scores.get("llbmIntelligence") ?? new Map<string, number>();
 
-  if (!vl_parsed.ok) {
-    console.log(`LLMBM export unusable: ${vl_parsed.error}`);
-    return 1;
-  }
-
+  // Scored targets keyed by tail; the highest display score wins a tail clash.
   const vl_byTail = new Map<string, TailTarget>();
 
-  for (const vl_row of vl_parsed.value) {
-    const vl_modelId = vl_row.sourceModelId;
-    const vl_score = vl_row.score;
-
-    if (vl_modelId === null || vl_score === null) continue;
-
-    const vl_key = fh_tail(vl_modelId).toLowerCase();
+  for (const vl_llbmId of new Set([...vl_coding.keys(), ...vl_intel.keys()])) {
+    const vl_score = vl_coding.get(vl_llbmId) ?? vl_intel.get(vl_llbmId) ?? null;
+    const vl_key = fh_tail(vl_llbmId).toLowerCase();
     const vl_existing = vl_byTail.get(vl_key);
 
-    if (vl_existing === undefined || vl_score > vl_existing.score!) {
-      vl_byTail.set(vl_key, { llbmId: vl_modelId, score: vl_score });
+    if (vl_existing === undefined || (vl_score ?? -1) > (vl_existing.score ?? -1)) {
+      vl_byTail.set(vl_key, { llbmId: vl_llbmId, score: vl_score });
     }
   }
 
-  const vl_datasetByTail = fh_datasetModelTargets(vl_payload);
+  // Every dataset model keyed by tail (first id wins), for PENDING adoption.
+  const vl_datasetByTail = new Map<string, TailTarget>();
 
-  const vl_catalog = fh_liveCatalogIds();
+  for (const vl_llbmId of vl_live.models) {
+    const vl_key = fh_tail(vl_llbmId).toLowerCase();
+    if (!vl_datasetByTail.has(vl_key)) {
+      vl_datasetByTail.set(vl_key, { llbmId: vl_llbmId, score: null });
+    }
+  }
+
+  const vl_catalog = f_liveCatalogIds();
 
   if (vl_catalog === null) {
     console.log("catalog unavailable — is the OpenCode service running?");
@@ -204,7 +154,7 @@ async function f_main(): Promise<number> {
   }
 
   console.log(
-    `scored targets: ${vl_byTail.size} · dataset models: ${vl_datasetByTail.size} · catalog models: ${vl_catalog.length}\n`,
+    `scored targets: ${vl_byTail.size} (coding ${vl_coding.size}, intelligence ${vl_intel.size}) · dataset models: ${vl_datasetByTail.size} · catalog models: ${vl_catalog.length}\n`,
   );
 
   const vl_entries: GeneratedEntry[] = [];
@@ -212,68 +162,31 @@ async function f_main(): Promise<number> {
 
   for (const vl_catalogId of [...vl_catalog].sort()) {
     const vl_modelId = vl_catalogId.slice(vl_catalogId.indexOf("/") + 1);
+    const vl_scored = fh_resolveWithFree(vl_byTail, vl_modelId);
 
-    const vl_direct = fh_resolveTail(vl_byTail, vl_modelId);
-
-    if (vl_direct !== undefined) {
+    if (vl_scored !== undefined) {
       vl_entries.push({
         opencodeId: vl_catalogId,
-        llbmId: vl_direct.llbmId,
-        matchType: "exact",
-        score: vl_direct.score,
-        kind: "exact",
+        llbmId: vl_scored.target.llbmId,
+        matchType: vl_scored.matchType,
+        score: vl_scored.target.score,
+        kind: vl_scored.matchType,
       });
       continue;
     }
 
-    if (vl_modelId.endsWith("-free")) {
-      const vl_stem = fh_resolveTail(vl_byTail, vl_modelId.slice(0, -5));
-
-      if (vl_stem !== undefined) {
-        vl_entries.push({
-          opencodeId: vl_catalogId,
-          llbmId: vl_stem.llbmId,
-          matchType: "family_fallback",
-          score: vl_stem.score,
-          kind: "family_fallback",
-        });
-        continue;
-      }
-    }
-
-    // Unscored but real: adopt as PENDING (attaches when metric row appears).
-    const vl_pending = fh_resolveTail(vl_datasetByTail, vl_modelId);
+    // Unscored but real: adopt as PENDING (attaches when a metric row appears).
+    const vl_pending = fh_resolveWithFree(vl_datasetByTail, vl_modelId);
 
     if (vl_pending !== undefined) {
       vl_entries.push({
         opencodeId: vl_catalogId,
-        llbmId: vl_pending.llbmId,
-        matchType: "exact",
+        llbmId: vl_pending.target.llbmId,
+        matchType: vl_pending.matchType,
         score: null,
-        kind: "PENDING",
+        kind: vl_pending.matchType === "exact" ? "PENDING" : "PENDING family",
       });
       continue;
-    }
-
-    if (vl_modelId.endsWith("-free")) {
-      const vl_pendingStem = fh_resolveTail(
-        vl_datasetByTail,
-        vl_modelId.slice(0, -5),
-      );
-
-      if (
-        vl_pendingStem !== undefined &&
-        !vl_byTail.has(fh_tail(vl_pendingStem.llbmId).toLowerCase())
-      ) {
-        vl_entries.push({
-          opencodeId: vl_catalogId,
-          llbmId: vl_pendingStem.llbmId,
-          matchType: "family_fallback",
-          score: null,
-          kind: "PENDING family",
-        });
-        continue;
-      }
     }
 
     vl_entries.push({
@@ -288,7 +201,7 @@ async function f_main(): Promise<number> {
 
   console.log("REVIEW TABLE");
   console.log(
-    "opencode id                                   | llbm id                                       | score | kind",
+    "opencode id                                   | llbm id                                      | score | kind",
   );
   console.log("-".repeat(110));
 
@@ -306,8 +219,9 @@ async function f_main(): Promise<number> {
     const vl_all = new Map([...vl_datasetByTail, ...vl_byTail]);
 
     for (const vl_modelId of vl_unmatched) {
+      const vl_prefix = vl_modelId.slice(0, 4).toLowerCase();
       const vl_candidates = [...vl_all.entries()]
-        .filter(([p_tail]) => p_tail.startsWith(vl_modelId.slice(0, 4).toLowerCase()))
+        .filter(([p_tail]) => p_tail.startsWith(vl_prefix))
         .map(
           ([, p_target]) =>
             `${p_target.llbmId}${p_target.score !== null ? ` (${p_target.score.toFixed(1)})` : " (unscored)"}`,
@@ -344,19 +258,14 @@ async function f_main(): Promise<number> {
 
     vl_lastGroup = vl_group;
 
-    if (vl_entry.llbmId === null) {
-      console.log(
-        `  { opencodeId: "${vl_entry.opencodeId}", llbmId: null, matchType: "exact" },`,
-      );
-    } else {
-      console.log(
-        `  { opencodeId: "${vl_entry.opencodeId}", llbmId: "${vl_entry.llbmId}", matchType: "${vl_entry.matchType}" },`,
-      );
-    }
+    const vl_llbmId = vl_entry.llbmId === null ? "null" : `"${vl_entry.llbmId}"`;
+    console.log(
+      `  { opencodeId: "${vl_entry.opencodeId}", llbmId: ${vl_llbmId}, matchType: "${vl_entry.matchType}" },`,
+    );
   }
 
   console.log("];");
   return 0;
 }
 
-process.exitCode = await f_main();
+process.exitCode = await fh_main();

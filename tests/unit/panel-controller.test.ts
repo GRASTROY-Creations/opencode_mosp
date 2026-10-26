@@ -12,18 +12,20 @@ import type { ModelOverviewSnapshot } from "../../src/services/model-overview";
 import {
   f_formatContext,
   f_formatPrice,
-  f_formatRank,
   f_formatScore,
   f_formatTimestamp,
   f_truncate,
 } from "../../src/ui/format";
 import {
+  f_buildEmptyMessage,
   f_buildSidebarSummary,
   f_buildStatusLine,
   f_buildStatusLines,
   f_buildTableLines,
   f_deriveOverviewRows,
+  f_findLeader,
   f_formatChipLabel,
+  f_formatUpdateLabel,
   f_getDefaultSortDirection,
   f_getSortKeyLabel,
   f_nextSortState,
@@ -42,7 +44,7 @@ function fh_preferences(p_overrides: Partial<OverviewViewPreferences> = {}): Ove
   return { ...k_defaultViewPreferences, ...p_overrides };
 }
 
-function f_createSnapshot(
+function fh_createSnapshot(
   p_models: ModelOverviewSnapshot["models"],
   p_state: OverviewState = "ready",
   p_warningCount: number = 0,
@@ -90,11 +92,9 @@ describe("format helpers", () => {
     expect(f_formatContext(1_000_000)).toBe("1.0M");
   });
 
-  test("scores and ranks never fabricate values", () => {
+  test("scores never fabricate values", () => {
     expect(f_formatScore(null)).toBe("—");
     expect(f_formatScore(80.176)).toBe("80.2");
-    expect(f_formatRank(null)).toBe("—");
-    expect(f_formatRank(3)).toBe("#3");
   });
 
   test("timestamps render compactly and null means never", () => {
@@ -111,23 +111,30 @@ describe("format helpers", () => {
 });
 
 describe("chip labels", () => {
-  test("selected chips carry a double marker, hovered a single one", () => {
-    expect(f_formatChipLabel(true, false, "LLBM")).toBe("[>>LLBM]");
-    expect(f_formatChipLabel(false, true, "LLBM")).toBe("[>LLBM]");
-    expect(f_formatChipLabel(false, false, "LLBM")).toBe("[LLBM]");
-    expect(f_formatChipLabel(true, true, "LLBM")).toBe("[>>LLBM]");
-    expect(f_formatChipLabel(true, false, "missing")).toBe("[>>missing]");
-    expect(f_formatChipLabel(false, true, "free")).toBe("[>free]");
-    expect(f_formatChipLabel(false, false, "free")).toBe("[free]");
+  test("selected chips carry a double marker", () => {
+    expect(f_formatChipLabel(true, "free")).toBe("[>>free]");
+    expect(f_formatChipLabel(false, "free")).toBe("[free]");
+  });
+
+  test("update button shows progress while a refresh runs", () => {
+    expect(f_formatUpdateLabel(false)).toBe("[update]");
+    expect(f_formatUpdateLabel(true)).toBe("[updating…]");
+  });
+
+  test("empty table points at the update button only when nothing is loaded", () => {
+    expect(f_buildEmptyMessage(0)).toBe(
+      "No models loaded — click [update] or run /mosp update",
+    );
+    expect(f_buildEmptyMessage(5)).toBe("No models match the current filters");
   });
 });
 
-describe("sort and ranking state", () => {
+describe("sort state", () => {
   test("default direction is descending for score/date columns, ascending otherwise", () => {
-    expect(f_getDefaultSortDirection("llbmScore")).toBe("desc");
+    expect(f_getDefaultSortDirection("codingScore")).toBe("desc");
+    expect(f_getDefaultSortDirection("intelligenceScore")).toBe("desc");
     expect(f_getDefaultSortDirection("releaseDate")).toBe("desc");
     expect(f_getDefaultSortDirection("contextWindow")).toBe("desc");
-    expect(f_getDefaultSortDirection("llbmRank")).toBe("asc");
     expect(f_getDefaultSortDirection("inputPrice")).toBe("asc");
     expect(f_getDefaultSortDirection("name")).toBe("asc");
   });
@@ -143,8 +150,8 @@ describe("sort and ranking state", () => {
   });
 
   test("selecting a new column uses its default direction", () => {
-    expect(f_nextSortState(fh_preferences({ sortKey: "name" }), "llbmScore")).toEqual({
-      sortKey: "llbmScore",
+    expect(f_nextSortState(fh_preferences({ sortKey: "name" }), "intelligenceScore")).toEqual({
+      sortKey: "intelligenceScore",
       sortDirection: "desc",
     });
     expect(f_nextSortState(fh_preferences({ sortKey: "name" }), "inputPrice")).toEqual({
@@ -169,7 +176,9 @@ describe("command parsing", () => {
   });
 
   test("sort accepts friendly aliases and column keys", () => {
-    expect(f_parseOverviewCommand("sort llbm")).toEqual({ kind: "sort", key: "llbmRank" });
+    expect(f_parseOverviewCommand("sort coding")).toEqual({ kind: "sort", key: "codingScore" });
+    expect(f_parseOverviewCommand("sort intel")).toEqual({ kind: "sort", key: "intelligenceScore" });
+    expect(f_parseOverviewCommand("sort Intelligence")).toEqual({ kind: "sort", key: "intelligenceScore" });
     expect(f_parseOverviewCommand("sort input-price")).toEqual({ kind: "sort", key: "inputPrice" });
     expect(f_parseOverviewCommand("sort inputPrice")).toEqual({ kind: "sort", key: "inputPrice" });
     expect(f_parseOverviewCommand("sort output-price")).toEqual({ kind: "sort", key: "outputPrice" });
@@ -180,6 +189,7 @@ describe("command parsing", () => {
   test("invalid commands are rejected", () => {
     expect(f_parseOverviewCommand("sort")).toBeUndefined();
     expect(f_parseOverviewCommand("sort nonsense")).toBeUndefined();
+    expect(f_parseOverviewCommand("sort llbm")).toBeUndefined();
     expect(f_parseOverviewCommand("ranking llbm")).toBeUndefined();
     expect(f_parseOverviewCommand("nope")).toBeUndefined();
   });
@@ -191,8 +201,8 @@ describe("command parsing", () => {
   test("sort key labels are human readable", () => {
     expect(f_getSortKeyLabel("name")).toBe("Model");
     expect(f_getSortKeyLabel("providerName")).toBe("Provider");
-    expect(f_getSortKeyLabel("llbmScore")).toBe("LLBM");
-    expect(f_getSortKeyLabel("llbmRank")).toBe("LLBM");
+    expect(f_getSortKeyLabel("codingScore")).toBe("Coding");
+    expect(f_getSortKeyLabel("intelligenceScore")).toBe("Intel");
     expect(f_getSortKeyLabel("contextWindow")).toBe("Ctx");
     expect(f_getSortKeyLabel("inputPrice")).toBe("In $/M");
   });
@@ -209,7 +219,7 @@ describe("derived rows", () => {
       inputPrice: 3,
       outputPrice: 15,
       contextWindow: 200_000,
-      benchmarks: [f_createTestBenchmark("llbm", 80.1, { rank: 2 })],
+      benchmarks: [f_createTestBenchmark("llbmCoding", 50.5)],
     }),
     f_createTestModel({
       id: "openai/gpt-test",
@@ -230,7 +240,7 @@ describe("derived rows", () => {
       inputPrice: null,
       outputPrice: null,
       contextWindow: null,
-      benchmarks: [f_createTestBenchmark("llbm", 50.5, { rank: 1 })],
+      benchmarks: [f_createTestBenchmark("llbmCoding", 80.1)],
     }),
   ];
 
@@ -238,7 +248,7 @@ describe("derived rows", () => {
     const vl_rows = f_deriveOverviewRows(vl_models, fh_preferences(), k_defaultFilters);
     expect(vl_rows.totalCount).toBe(3);
     expect(vl_rows.filteredCount).toBe(3);
-    // Default is llbmRank asc with missing ranks last (ties break by model ID).
+    // Default is the coding score, highest first, with missing scores last.
     expect(vl_rows.rows.map((p_model) => p_model.id)).toEqual([
       "google/gemini-test",
       "anthropic/claude-test",
@@ -288,11 +298,11 @@ describe("status text", () => {
       "no cached data — run /mosp update",
     );
     expect(f_buildStatusLine(undefined, true, null)).toBe("refreshing…");
-    expect(f_buildStatusLine(f_createSnapshot([]), false, "boom")).toBe("error: boom");
+    expect(f_buildStatusLine(fh_createSnapshot([]), false, "boom")).toBe("error: boom");
   });
 
   test("status line summarizes aggregate state, sources, and warnings", () => {
-    const vl_line = f_buildStatusLine(f_createSnapshot([], "partial", 2), false, null);
+    const vl_line = f_buildStatusLine(fh_createSnapshot([], "partial", 2), false, null);
     expect(vl_line).toContain("partial");
     expect(vl_line).toContain("models: fresh");
     expect(vl_line).toContain("2 warning(s)");
@@ -300,12 +310,12 @@ describe("status text", () => {
   });
 
   test("status dialog lists configuration and filters state", () => {
-    const vl_rows = f_deriveOverviewRows(f_createDialogModels(), fh_preferences(), {
+    const vl_rows = f_deriveOverviewRows(fh_createDialogModels(), fh_preferences(), {
       ...k_defaultFilters,
       freeOnly: true,
     });
     const vl_lines = f_buildStatusLines(
-      f_createSnapshot(f_createDialogModels()),
+      fh_createSnapshot(fh_createDialogModels()),
       vl_rows,
       fh_preferences({ sortKey: "inputPrice", sortDirection: "desc" }),
       { ...k_defaultFilters, freeOnly: true },
@@ -314,24 +324,43 @@ describe("status text", () => {
     );
     expect(vl_lines.length).toBeGreaterThanOrEqual(4);
     expect(vl_lines[0]).toBe(
-      `status: ${f_buildStatusLine(f_createSnapshot(f_createDialogModels()), false, null)}`,
+      `status: ${f_buildStatusLine(fh_createSnapshot(fh_createDialogModels()), false, null)}`,
     );
     expect(vl_lines.join("\n")).toContain("sort: In $/M descending");
     expect(vl_lines.join("\n")).toContain("filters: free");
   });
 
-  test("sidebar summary shows the ranking leader or an honest gap", () => {
+  test("sidebar summary shows the top coding model or an honest gap", () => {
     const vl_leader = f_createTestModel({
       id: "anthropic/claude-test",
       name: "Claude Test",
-      benchmarks: [f_createTestBenchmark("llbm", 80.1, { rank: 1 })],
+      benchmarks: [f_createTestBenchmark("llbmCoding", 80.1)],
     });
     expect(f_buildSidebarSummary(vl_leader, 16)).toBe(
-      "16 models · LLBM #1 Claude Test 80.1",
+      "16 models · top coding Claude Test 80.1",
     );
     expect(f_buildSidebarSummary(null, 16)).toBe(
-      "16 models · no LLBM data",
+      "16 models · no LLMBM data",
     );
+  });
+
+  test("leader is the highest coding score and ignores intelligence-only rows", () => {
+    const vl_low = f_createTestModel({
+      id: "a/low",
+      benchmarks: [f_createTestBenchmark("llbmCoding", 40)],
+    });
+    const vl_high = f_createTestModel({
+      id: "a/high",
+      benchmarks: [f_createTestBenchmark("llbmCoding", 70)],
+    });
+    const vl_intelOnly = f_createTestModel({
+      id: "a/intel",
+      benchmarks: [f_createTestBenchmark("llbmIntelligence", 99)],
+    });
+
+    expect(f_findLeader([vl_low, vl_intelOnly, vl_high])?.id).toBe("a/high");
+    expect(f_findLeader([vl_intelOnly])).toBeNull();
+    expect(f_findLeader([])).toBeNull();
   });
 });
 
@@ -356,7 +385,7 @@ describe("header collapse flag", () => {
   });
 });
 
-function f_createDialogModels() {
+function fh_createDialogModels(): ReturnType<typeof f_createTestModel>[] {
   return [
     f_createTestModel({
       id: "openai/gpt-test",
@@ -399,17 +428,21 @@ describe("table lines", () => {
   });
 
   test("marks proxy benchmark cells with a tilde", () => {
-    const vl_columns: readonly TableColumn[] = [{ key: "llbmRank", width: 11 }];
+    const vl_columns: readonly TableColumn[] = [
+      { key: "codingScore", width: 8 },
+      { key: "intelligenceScore", width: 8 },
+    ];
     const vl_rows = [
       f_createTestModel({
         id: "p/proxy",
         name: "Proxy",
         benchmarks: [
-          f_createTestBenchmark("llbm", 50, { rank: 7, matchType: "family_fallback" }),
+          f_createTestBenchmark("llbmCoding", 50, { matchType: "family_fallback" }),
+          f_createTestBenchmark("llbmIntelligence", 30, { matchType: "family_fallback" }),
         ],
       }),
     ];
     const vl_line = f_buildTableLines(vl_rows, vl_columns)[0] ?? "";
-    expect(vl_line.trim().startsWith("~#7 50.0")).toBe(true);
+    expect(vl_line).toBe(` ${"~50.0".padEnd(8)} ${"~30.0".padEnd(8)}`);
   });
 });

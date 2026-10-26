@@ -1,21 +1,21 @@
 # Data Flow
 
-**Status:** LLMBM migration complete (2026-10-25, Adjustments 19/20). The UI
-renders host-first models plus cached snapshots; live fetches happen solely
-through explicit `/mosp update`.
+**Status:** current as of Adjustment 22 (2026-10-26). The UI renders
+host-first models plus cached snapshots; live fetches happen solely through
+explicit `/mosp update`.
 
 ## Pipeline
 
 ```text
 OpenCode registry ──┐
-LLMBM /v1/export    ├─► source adapter ─► domain records ─► matching ─► ranking ─► aggregation/cache ─► UI
+LLMBM /v1/export    ├─► source adapter ─► domain records ─► matching ─► aggregation/cache ─► sort/filter ─► UI
 models.dev api.json ┘
 ```
 
 | Source | Adapter | Output |
 |---|---|---|
-| Local model registry (`context.model.list()` / `context.data.location.model.list()`) | `src/providers/opencode-models.ts` (+ `opencode-pricing.ts`) | `ModelRecord[]` with `source: "opencode"`, no benchmarks — **host-first** on every panel mount (Adjustment 17); the cached entry is the fallback |
-| LLMBM export snapshot (`aa_coding_index` metric) | `src/providers/llbm.ts` | `ModelBenchmark[]` (`llbm`, `llbm-<metric>`) |
+| Local model registry (`context.data.location.model.list()`) | `src/providers/opencode-models.ts` (+ `opencode-pricing.ts`) | `ModelRecord[]` with `source: "opencode"`, no benchmarks — **host-first** on every panel mount (Adjustment 17); the cached entry is the fallback |
+| LLMBM export snapshot (`aa_coding_index` + `aa_intelligence_index`) | `src/providers/llbm.ts` | `ModelBenchmark[]` with `benchmarkId` `llbmCoding` / `llbmIntelligence`, `variant: "llbm-<metric>"` |
 | models.dev provider catalog (`opencode` provider) | `src/providers/models-dev.ts` | `ModelsDevCrosswalk` — cached bridge for future mappings; **not displayed** (registry stays authoritative) |
 
 `src/utils/fetch-json.ts` owns the network policy: AbortController timeout,
@@ -30,72 +30,68 @@ usable.
   domain value.
 - A broken envelope fails the source. A malformed row is skipped with a
   warning; conflicting duplicate identities are left ambiguous/unmatched.
-- Missing prices, scores, ranks, sample counts, and dates are `null`; absence is
-  never converted to `0`. Genuine zero prices/scores are preserved.
+- Missing prices, scores, sample counts, and dates are `null`; absence is never
+  converted to `0`. Genuine zero prices/scores are preserved.
 - Benchmark adapters emit only rows that exist. The aggregator attaches them to
   models later; unmatched benchmark rows are not forced onto similar names.
 - Registry `settings`, `headers`, `body`, and variant credentials are never
   read, logged, or persisted.
 - Benchmark scores always carry their protocol: the LLMBM metric lives in the
   benchmark `variant` (`llbm-<metric>`) and each row keeps its `observedAt`.
+- Only reported scores are shown; no rank is derived (Adjustment 22).
 
 ## Matching (`src/services/model-matching.ts`)
 
-Benchmark rows are matched independently, in this order: exact
-`<providerId>/<modelId>` key, exact `modelId`, exact `canonicalId`, reviewed
-alias, reviewed benchmark mapping (`src/config/llbm-mappings.ts`, exact
-source-ID first, then a casefolded fallback that only applies when the folded
-key resolves to a single distinct source — collisions drop the fold; exact
-matches remain usable), then conservative normalization (trim, lowercase, `_`
-→ `-` only). Provider prefixes, version suffixes, and punctuation are not
-stripped automatically. A mapping source ID may carry several reviewed
-targets (Adjustment 21 sharing): the `exact` owner attaches directly and each
-`family_fallback` sibling attaches as a clone of the same row.
+Benchmark rows are matched independently (per benchmark id, so one source
+model feeds both LLMBM columns), in this order:
+
+1. exact `<providerId>/<modelId>` key;
+2. exact `modelId`;
+3. exact `canonicalId`;
+4. reviewed LLMBM mapping (`src/config/llbm-mappings.ts`): exact source id
+   first, then a casefolded fallback that only applies when the folded key
+   resolves to a single distinct source (collisions drop the fold; exact keys
+   remain usable);
+5. conservative normalization (trim, lowercase, `_` → `-` only). Provider
+   prefixes, version suffixes, and punctuation are never stripped.
 
 - A strategy that resolves to more than one model is recorded as `ambiguous`;
   matching stops there and never falls through to a looser strategy.
-- A reviewed alias whose target is absent, a reviewed mapping whose target is
-  absent (`mapping-target-missing`), a row without a source ID, and a duplicate
-  benchmark for a model are all recorded as unmatched.
-- Existing benchmark rows are never overwritten.
-- `src/config/model-aliases.ts` stays empty (no legacy alias rows).
-  `src/config/llbm-mappings.ts` was rebuilt on 2026-10-25 (Adjustment 21)
-  entry-by-entry against the live LLMBM dataset: **79 of 82** catalog models
-  carry a source ID — 47 are scored for `aa_coding_index` today, 32 are real
-  models without a metric row yet (PENDING; they attach automatically once
-  scored), and only `beam-free`, `big-pickle`, `flint-40b-free` stay `null`.
-  Dash-form Claude IDs were corrected to their live dot forms
-  (`claude-opus-4-8` → `anthropic/claude-opus-4.8`); sibling proxies
-  (`gpt-5-codex` → `openai/gpt-5`, …) are owner-reviewed manual entries. The
-  candidate tables in KNOWLEDGE_04.md and KNOWLEDGE_06.md attached ZERO rows
-  as written, so nothing from them was adopted. The service accepts injected
-  registries for tests and future reviewed mappings.
+- A mapping source id may carry several reviewed targets (Adjustment 21
+  sharing): the `exact` owner attaches directly and each `family_fallback`
+  sibling attaches as a clone of the same row.
+- A reviewed mapping whose target is absent (`mapping-target-missing`) and a
+  row without a source id (`missing-source-id`) are recorded as unmatched.
+- Attached rows are **merged** into the model's existing `benchmarks`; a second
+  row for a benchmark id the model already carries is dropped and recorded as
+  `duplicate-benchmark` — existing rows are never overwritten.
 - Every attached row records a `matchType`: mapping entries carry their own
-  kind (`exact`, `family_fallback`); legacy strategies attach as `exact`.
+  kind (`exact`, `family_fallback`); id strategies attach as `exact`.
   `family_fallback` cells render with a `~` prefix and are never presented as
   the model's own score.
-- `bun run validate:mappings` (`scripts/validate-mappings.ts`) re-fetches the
-  live LLMBM export (plus the location catalog unless `--skip-catalog`) and
-  classifies every non-null `llbmId` as **PASS** (scored), **PENDING** (real
-  model, no metric row yet — kept on purpose), or **DRIFT** (exists nowhere —
-  must be corrected or nulled). It exits non-zero only on DRIFT.
-  Network-required; deliberately not part of `bun run check`.
+- Mapping coverage (2026-10-26): 82 entries, 80 with a source id — 74 carry a
+  value (coding 47, intelligence 74), 6 PENDING, 2 `null`. Details and the
+  generation policy: `docs/api/llmbenchmark.md`.
+- `bun run validate:mappings` re-fetches the live export (plus the location
+  catalog unless `--skip-catalog`) and classifies every non-null `llbmId` as
+  **PASS** (scored in at least one metric), **PENDING** (real model, no score
+  yet), or **DRIFT** (exists nowhere / target left the catalog). It exits
+  non-zero only on DRIFT. Network-required; deliberately not part of
+  `bun run check`.
 
-## Ranking and filtering
+## Sorting and filtering
 
 `src/services/ranking.ts` is pure: it never fetches, mutates, or depends on the
-TUI. Missing values (including absent benchmarks, prices, ranks, and dates)
-stay last in both directions; ties break by model ID for deterministic output.
-Names use a fixed `en` collator with numeric handling. `f_assignBenchmarkRanks`
-derives competition ranks from scores (ties share a rank, e.g. 1, 1, 3); a
-null score keeps `rank: null`, and source-supplied ranks are always recomputed
-locally (LLMBM rows carry none; the old GPQA published rank mixed subsets).
+TUI. Missing values (absent benchmarks, prices, dates) stay last in both
+directions; ties break by model ID for deterministic output. Names use a fixed
+`en` collator with numeric handling. Benchmark columns (`codingScore`,
+`intelligenceScore`) sort by the reported score; the default view is
+`codingScore` descending.
 
 `src/services/model-filter.ts` composes exact provider IDs, benchmark
 presence/absence (one benchmark or any), and explicit-free pricing. Filters
-are AND-combined and never mutate the catalog. (Case-insensitive text search
-was removed end-to-end in Adjustment 11; the UI exposes only the free filter
-chip.)
+are AND-combined and never mutate the catalog. The UI exposes only the free
+filter chip.
 
 ## Failure isolation
 
@@ -109,8 +105,9 @@ includes query strings, headers, or credentials in errors.
 `src/services/model-overview.ts` assembles snapshots and
 `src/services/cache.ts` persists per-source payloads:
 
-- `f_getModelOverview` / `f_getOverviewStatus` are cache-only reads; panel opens
-  and keystrokes never start a live request.
+- `f_getModelOverview` / `f_getOverviewStatus` are cache-only reads;
+  `f_getModelOverviewFromHost` is the host-first variant used on panel mount.
+  Panel opens never start a live request.
 - `f_refreshModelOverview` refreshes stale/missing/forced sources in parallel,
   preserves last-known-good entries on failure, and deduplicates concurrent
   refreshes per cache key.
@@ -119,30 +116,7 @@ includes query strings, headers, or credentials in errors.
 - Status derivation and storage rules are documented in
   `docs/architecture/caching.md`.
 
-## Next phases
+## History
 
-- **Phase 4 (done):** matching, deterministic sorting/ranks, and filters are
-  implemented in `src/services/`.
-- **Phase 5 (done):** aggregation and per-source caching wrap the adapters;
-  live fetches remain explicit/background, never on panel open or keystroke.
-- **Phase 6 (done):** the PoC panel was replaced by the real UI
-  (`src/ui/panel-controller.ts` + `src/tui.tsx`), wired to
-  `f_getModelOverview` for cache-only reads and `f_refreshModelOverview` for
-  explicit refreshes. See `docs/architecture/ui-integration.md`.
-- **Adjustment 16 (done):** the fifth source `models-dev` caches the trimmed
-  models.dev crosswalk (name/family/release date per opencode model) for the
-  future mapping stage; displayed data still comes exclusively from the
-  OpenCode registry. See `docs/api/models-dev.md`.
-- **Adjustments 19/20 (done):** GPQA + LiveCodeBench were replaced by the
-  single `llbm` source (`src/providers/llbm.ts`,
-  `docs/api/llmbenchmark.md`); mappings were regenerated from the live
-  `/v1/export` scored set (37/82) via `bun run generate:mappings`, drift-checked
-  by `bun run validate:mappings`.
-- **Adjustment 21 (done):** the mapping table was rebuilt entry-by-entry
-  against the live LLMBM dataset (79/82 with a source ID: 47 scored today,
-  32 PENDING, 3 null) with dot-form corrections for the Claude IDs, and the
-  matcher now lets one source ID attach to several reviewed targets
-  (exact owner + cloned `family_fallback` siblings). The validator classifies
-  PASS/PENDING/DRIFT; the generator gained the dot-equivalence and PENDING
-  rules. See `docs/PLAN.md` and `docs/api/llmbenchmark.md`.
-- **Phase 7 (next):** testing, security, and CI hardening.
+Phase-by-phase history (GPQA/LiveCodeBench era, LLMBM migration, mapping
+rebuilds) is recorded in `docs/PLAN.md` (Adjustments 16–22).

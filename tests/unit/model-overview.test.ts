@@ -46,10 +46,10 @@ function fh_createReadyModels(): readonly ModelRecord[] {
 
 function fh_createLlbmRowsAlpha(): readonly ModelBenchmark[] {
   return [
-    f_createTestBenchmark("llbm", 80, {
+    f_createTestBenchmark("llbmCoding", 80, {
       sourceModelId: "test/alpha",
     }),
-    f_createTestBenchmark("llbm", 60, {
+    f_createTestBenchmark("llbmCoding", 60, {
       sourceModelId: "test/beta",
     }),
   ];
@@ -122,8 +122,10 @@ describe("f_getModelOverview", () => {
       (p_model) => p_model.modelId === "beta",
     );
 
-    expect(vl_alpha?.benchmarks[0]?.rank).toBe(1);
-    expect(vl_beta?.benchmarks[0]?.rank).toBe(2);
+    // Only reported scores are attached; no rank is derived.
+    expect(vl_alpha?.benchmarks[0]?.score).toBe(80);
+    expect(vl_beta?.benchmarks[0]?.score).toBe(60);
+    expect(vl_alpha?.benchmarks[0]).not.toHaveProperty("rank");
   });
 
   test("returns idle when no cache entry exists", async () => {
@@ -528,30 +530,6 @@ describe("f_refreshModelOverview", () => {
     expect(vl_snapshot.models).toEqual([]);
   });
 
-  test("keeps every other source when LLMBM fails", async () => {
-    const vl_cache = f_createMemoryCache();
-    const vl_models = fh_createReadyModels();
-
-    await fh_writeCache(vl_cache, "opencode-models", vl_models);
-
-    const vl_snapshot = await f_refreshModelOverview({
-      cache: vl_cache,
-      now: f_now,
-      loadModels: () => Promise.resolve(f_adapterOk(vl_models)),
-      loadLlbm: () => Promise.resolve(f_adapterFail<readonly ModelBenchmark[]>("llbm is down")),
-      loadModelsDev: () => Promise.resolve(f_adapterOk(fh_createCrosswalk())),
-    });
-
-    const vl_llbm = vl_snapshot.status.sources.find(
-      (p_source) => p_source.source === "llbm",
-    );
-
-    expect(vl_llbm?.state).toBe("error");
-    expect(vl_llbm?.error).toBe("llbm is down");
-    expect(vl_snapshot.status.state).toBe("partial");
-    expect(vl_snapshot.models).toHaveLength(2);
-    expect(vl_snapshot.matches).toHaveLength(0);
-  });
 });
 
 describe("f_getOverviewStatus", () => {
@@ -663,8 +641,8 @@ describe("f_mergeModelSources", () => {
         modelId: "bench-a",
         providerId: "opencode",
         benchmarks: [
-          f_createTestBenchmark("llbm", 50),
-          f_createTestBenchmark("llbm", null, { sourceModelId: "bench-a" }),
+          f_createTestBenchmark("llbmCoding", 50),
+          f_createTestBenchmark("llbmCoding", null, { sourceModelId: "bench-a" }),
         ],
       }),
     ];
@@ -674,7 +652,7 @@ describe("f_mergeModelSources", () => {
         modelId: "bench-a",
         providerId: "opencode",
         benchmarks: [
-          f_createTestBenchmark("llbm", 70, { sourceModelId: "bench-a" }),
+          f_createTestBenchmark("llbmCoding", 70, { sourceModelId: "bench-a" }),
         ],
       }),
     ];
@@ -730,10 +708,13 @@ describe("f_resolveRequestTimeoutMs", () => {
 });
 
 describe("f_getModelOverviewFromHost", () => {
-  test("host catalog wins and real mappings attach", async () => {
+  test("host catalog wins and real mappings attach both metrics", async () => {
     const vl_cache = f_createMemoryCache();
     await fh_writeCache(vl_cache, "llbm", [
-      f_createTestBenchmark("llbm", 61.8, {
+      f_createTestBenchmark("llbmCoding", 61.8, {
+        sourceModelId: "moonshotai/kimi-k2.6",
+      }),
+      f_createTestBenchmark("llbmIntelligence", 27, {
         sourceModelId: "moonshotai/kimi-k2.6",
       }),
     ]);
@@ -756,12 +737,18 @@ describe("f_getModelOverviewFromHost", () => {
     });
 
     expect(vl_snapshot.models).toHaveLength(1);
-    expect(vl_snapshot.matches).toHaveLength(1);
-    expect(vl_snapshot.matches[0]?.strategy).toBe("mapping");
-    expect(vl_snapshot.matches[0]?.matchType).toBe("exact");
+    expect(vl_snapshot.matches).toHaveLength(2);
+    expect(vl_snapshot.matches.every((p_match) => p_match.strategy === "mapping")).toBe(true);
+    expect(vl_snapshot.matches.every((p_match) => p_match.matchType === "exact")).toBe(true);
     expect(vl_snapshot.warnings).toEqual([]);
     expect(vl_snapshot.status.state).toBe("ready");
     expect(vl_snapshot.models[0]?.modelId).toBe("kimi-k2.6");
+    expect(
+      vl_snapshot.models[0]?.benchmarks.map((p_row) => [p_row.benchmarkId, p_row.score]),
+    ).toEqual([
+      ["llbmCoding", 61.8],
+      ["llbmIntelligence", 27],
+    ]);
   });
 
   test("empty host list falls back to cached snapshot", async () => {

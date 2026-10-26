@@ -13,7 +13,6 @@ import {
   f_findBenchmark,
   f_validateModelBenchmark,
   k_benchmarkIds,
-  k_llbmMetric,
 } from "../../src/domain/model-benchmark";
 import {
   f_createUnavailablePricing,
@@ -28,9 +27,7 @@ import {
 } from "../../src/domain/model-record";
 import {
   f_isModelSortKey,
-  f_isRankingMode,
   f_isSortDirection,
-  k_defaultRankingMode,
   k_defaultSortDirection,
   k_defaultSortKey,
   k_modelSortKeys,
@@ -64,16 +61,15 @@ const k_validPricing = {
 } as const;
 
 const k_validBenchmark = {
-  benchmarkId: "llbm",
-  variant: k_llbmMetric,
+  benchmarkId: "llbmCoding",
+  variant: "llbm-aa_coding_index",
   score: 72.5,
   scoreUnit: "percent",
-  rank: 1,
   sampleCount: null,
   windowStart: null,
   windowEnd: null,
-  sourceModelId: "hf/example-model",
-  sourceUrl: "https://huggingface.co/example-model",
+  sourceModelId: "openai/gpt-5-nano",
+  sourceUrl: "https://artificialanalysis.ai/models",
   evaluatedAt: null,
 } as const;
 
@@ -125,10 +121,10 @@ describe("domain guards", () => {
 
   test("parses only members of the allowed string union", () => {
     const vl_enum = fh_unwrap(
-      f_parseEnum("llbm", k_benchmarkIds, "benchmarkId"),
+      f_parseEnum("llbmCoding", k_benchmarkIds, "benchmarkId"),
     );
 
-    expect(vl_enum).toBe("llbm");
+    expect(vl_enum).toBe("llbmCoding");
     expect(f_parseEnum("other", k_benchmarkIds, "benchmarkId").ok).toBe(false);
   });
 
@@ -242,15 +238,23 @@ describe("pricing contract", () => {
 });
 
 describe("benchmark contract", () => {
-  test("keeps score and rank separate", () => {
+  test("keeps the reported score and drops any legacy rank field", () => {
     const vl_benchmark = fh_unwrap(
-      f_validateModelBenchmark(k_validBenchmark),
+      f_validateModelBenchmark({ ...k_validBenchmark, rank: 1 }),
     );
 
     expect(vl_benchmark.score).toBe(72.5);
-    expect(vl_benchmark.rank).toBe(1);
-    expect(vl_benchmark.variant).toBe(k_llbmMetric);
+    expect(vl_benchmark).not.toHaveProperty("rank");
+    expect(vl_benchmark.variant).toBe("llbm-aa_coding_index");
     expect(vl_benchmark.scoreUnit).toBe("percent");
+  });
+
+  test("accepts both LLMBM benchmark ids and rejects the retired one", () => {
+    for (const vl_id of k_benchmarkIds) {
+      expect(f_validateModelBenchmark({ ...k_validBenchmark, benchmarkId: vl_id }).ok).toBe(true);
+    }
+
+    expect(f_validateModelBenchmark({ ...k_validBenchmark, benchmarkId: "llbm" }).ok).toBe(false);
   });
 
   test("defaults matchType to null and accepts reviewed kinds", () => {
@@ -267,33 +271,25 @@ describe("benchmark contract", () => {
     ).toBe(false);
   });
 
-  test("treats zero as a real score and null rank as unranked", () => {
+  test("treats zero as a real score", () => {
     const vl_zero = fh_unwrap(
       f_validateModelBenchmark({
         ...k_validBenchmark,
         score: 0,
-        rank: null,
       }),
     );
 
     expect(vl_zero.score).toBe(0);
-    expect(vl_zero.rank).toBeNull();
-    expect(f_findBenchmark([vl_zero], "llbm")?.score).toBe(0);
-    expect(f_findBenchmark([vl_zero], "llbm")?.rank).toBeNull();
+    expect(f_findBenchmark([vl_zero], "llbmCoding")?.score).toBe(0);
+    expect(f_findBenchmark([vl_zero], "llbmIntelligence")).toBeNull();
   });
 
-  test("rejects scores outside 0-100 and malformed ranks", () => {
+  test("rejects scores outside 0-100", () => {
     expect(
       f_validateModelBenchmark({ ...k_validBenchmark, score: 101 }).ok,
     ).toBe(false);
     expect(
       f_validateModelBenchmark({ ...k_validBenchmark, score: -1 }).ok,
-    ).toBe(false);
-    expect(
-      f_validateModelBenchmark({ ...k_validBenchmark, rank: 0 }).ok,
-    ).toBe(false);
-    expect(
-      f_validateModelBenchmark({ ...k_validBenchmark, rank: 1.5 }).ok,
     ).toBe(false);
   });
 
@@ -350,8 +346,8 @@ describe("model record contract", () => {
     expect(vl_record.id).toBe("opencode/gpt-5-nano");
     expect(vl_record.pricing.inputUsdPerMillionTokens).toBe(0.1);
     expect(vl_record.benchmarks).toHaveLength(1);
-    expect(f_getBenchmarkForModel(vl_record, "llbm")?.score).toBe(72.5);
-    expect(f_getBenchmarkForModel(vl_record, "llbm")?.benchmarkId).toBe("llbm");
+    expect(f_getBenchmarkForModel(vl_record, "llbmCoding")?.score).toBe(72.5);
+    expect(f_getBenchmarkForModel(vl_record, "llbmCoding")?.benchmarkId).toBe("llbmCoding");
   });
 
   test("accepts a model with no price and no benchmark results", () => {
@@ -368,7 +364,7 @@ describe("model record contract", () => {
 
     expect(vl_record.pricing.inputUsdPerMillionTokens).toBeNull();
     expect(vl_record.benchmarks).toHaveLength(0);
-    expect(f_getBenchmarkForModel(vl_record, "llbm")).toBeNull();
+    expect(f_getBenchmarkForModel(vl_record, "llbmCoding")).toBeNull();
   });
 
   test("rejects duplicate benchmark entries", () => {
@@ -377,7 +373,7 @@ describe("model record contract", () => {
         ...k_validModel,
         benchmarks: [
           k_validBenchmark,
-          { ...k_validBenchmark, variant: "llbm-coding" },
+          { ...k_validBenchmark, variant: "llbm-duplicate" },
         ],
       }).ok,
     ).toBe(false);
@@ -404,9 +400,8 @@ describe("model record contract", () => {
 
 describe("sort vocabulary", () => {
   test("exposes the specification defaults", () => {
-    expect(k_defaultSortKey).toBe("llbmRank");
-    expect(k_defaultSortDirection).toBe("asc");
-    expect(k_defaultRankingMode).toBe("llbm");
+    expect(k_defaultSortKey).toBe("codingScore");
+    expect(k_defaultSortDirection).toBe("desc");
   });
 
   test("guards every supported value and rejects unknown ones", () => {
@@ -414,10 +409,8 @@ describe("sort vocabulary", () => {
       expect(f_isModelSortKey(vl_key)).toBe(true);
     }
 
-    expect(f_isModelSortKey("gpqa")).toBe(false);
-    expect(f_isRankingMode("llbm")).toBe(true);
-    expect(f_isRankingMode("gpqa")).toBe(false);
-    expect(f_isRankingMode("llbmScore")).toBe(false);
+    expect(f_isModelSortKey("llbmRank")).toBe(false);
+    expect(f_isModelSortKey("llbmScore")).toBe(false);
     expect(f_isSortDirection("asc")).toBe(true);
     expect(f_isSortDirection("desc")).toBe(true);
     expect(f_isSortDirection("up")).toBe(false);

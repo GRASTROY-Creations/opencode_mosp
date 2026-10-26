@@ -38,7 +38,7 @@ export default Plugin.define({
 - `src/ui/panel-controller.ts` — all state and pure logic, renderer-agnostic:
   preference/filter stores (persistence mirrors) plus controller-owned signals,
   snapshot signals, derived row memo
-  (filter → sort), ranking-leader memo, cache reads, refresh flow, command
+  (filter → sort), top-coding leader memo, cache reads, refresh flow, command
   parsing, and all display strings. Imported host types are **type-only**, so
   the module is unit-testable without the TUI runtime.
 - `src/ui/format.ts` — pure display formatters (missing → `—`, never `0`).
@@ -132,6 +132,12 @@ Registered commands (no binds):
 | `model_overview.refresh` | `f_refreshModelOverview` with force, toast summary |
 | `model_overview.command` | slash `/mosp` with raw args |
 
+`/mosp [toggle | status | update | redraw | sort <column>]` — sort tokens:
+`coding`, `intel`/`intelligence`, `ctx`, `input-price`, `output-price`, or any
+sort key (`name`, `providerName`, `releaseDate`, `contextWindow`,
+`codingScore`, `intelligenceScore`, `inputPrice`, `outputPrice`;
+dashes ignored, case-insensitive).
+
 ## Storage (`context.storage`)
 
 - `store(key, { initial })` → durable, disk-persisted, live-synced across TUI
@@ -143,7 +149,7 @@ Keys used by the panel (preferences are never mixed with cached data):
 
 | Key | Kind | Shape |
 |---|---|---|
-| `model-overview.preferences` | `store` | `{ sortKey, sortDirection, ranking, collapsed }` |
+| `model-overview.preferences` | `store` | `{ sortKey, sortDirection, collapsed }` (read once at startup to seed the controller signals) |
 | `model-overview.filters` | `memory` | `{ freeOnly }` |
 
 A stored shape from an older version is normalized once back to defaults at
@@ -197,19 +203,28 @@ startup. Benchmark/model data lives only in the file cache
 
 1. `session.panel` renders a bordered, titled table with a header row that is
    clickable only when header-click collapse is enabled (see item 7) and a
-   filter row containing only the `[free]` chip (search, the benchmark-presence
-   and `[redraw]` chips were removed; data updates run through
-   `/mosp update`, view repaints through `/mosp redraw`). Selectable chips
-   render through `f_formatChipLabel(selected, false, label)`: `[>>free]` when
+   toolbar row with the `[free]` filter chip on the left and a right-aligned
+   `[update]` button (search, the benchmark-presence and `[redraw]` chips were
+   removed; view repaints run through `/mosp redraw`). Selectable chips
+   render through `f_formatChipLabel(selected, label)`: `[>>free]` when
    active, `[free]` otherwise (hover state is never visualized).
-2. Columns: Model, Provider, Ctx, In $/M, Out $/M, LLBM — each column header
-   is clickable and shows `▲`/`▼` when active. Ctx sorts numerically and defaults
-   to descending; release-date and benchmark-score columns also default to
-   descending, everything else ascending; missing values always sort last. The
-   price columns are 10 cells wide so `Out $/M ▲` stays on one line (an 8-wide
-   column wrapped the arrow). Missing values render as `—`; benchmark cells show
-   `#rank score`; `family_fallback`-mapped rows get a `~` prefix and are never
-   presented as the model's own score.
+   `[update]` runs the same path as `/mosp update` (forced refresh of every
+   source plus result toast); it shows `[updating…]` (`f_formatUpdateLabel`)
+   and ignores presses while a refresh runs. If the refresh yields no models
+   (e.g. the host catalog was still empty when synced), the controller falls
+   back to the host-first read, so a panel that opened empty recovers with one
+   click. The empty-table hint reads `No models loaded — click [update] or run
+   /mosp update`.
+2. Columns: Model, Provider, Ctx, In $/M, Out $/M, Coding, Intel — each column
+   header is clickable and shows `▲`/`▼` when active. `Coding` is the LLMBM
+   `aa_coding_index`, `Intel` the `aa_intelligence_index` (Adjustment 22); both
+   show the reported score only (no rank). Ctx, release-date and both score
+   columns default to descending, everything else ascending; missing values
+   always sort last. The default view is `Coding` descending. The price columns
+   are 10 cells wide so `Out $/M ▲` stays on one line; Ctx hides below panel
+   width 98 and Provider below 82. Missing values render as `—`;
+   `family_fallback`-mapped cells get a `~` prefix and are never presented as
+   the model's own score.
 3. Rows come from the controller's derived memo: the active filters (only the
    free chip remains in the UI; provider/presence filters stay available at the
    service layer), then the non-mutating comparator; missing values sort last
@@ -217,9 +232,9 @@ startup. Benchmark/model data lives only in the file cache
 4. Footer shows aggregate state, shortened per-source states, last refresh, and
    warning count; empty cache shows `no cached data — run /mosp
    update`, filtered-to-nothing shows a distinct message.
-5. `sidebar.content` shows `◫ N models · LLBM #rank name score · panel
-   open|closed · /mosp` (or `no LLBM data` when nothing is ranked). The leader
-   is the best-ranked model by the active LLBM metric.
+5. `sidebar.content` shows `◫ N models · top coding name score · panel
+   open|closed · /mosp` (or `no LLMBM data` when no model has a coding score).
+   The leader is the model with the highest LLMBM coding score.
 6. When header-click collapse is enabled, collapse state survives panel toggles;
    sorting and the free filter always survive toggles and collapse; repeated
    toggles never fetch.
@@ -246,12 +261,18 @@ startup. Benchmark/model data lives only in the file cache
    open. `/mosp redraw` re-reads the cache and repaints (info toast) without
    touching the network.
 4. Click a column header → sort direction indicator flips; `/mosp sort
-   input-price` matches the same state.
+   input-price` matches the same state. `/mosp sort coding` and
+   `/mosp sort intel` select the two LLMBM columns; after `/mosp update` both
+   columns show scores (`~` marks family fallbacks). A chosen sort survives a
+   TUI restart (preferences seed the controller at startup).
 5. Clicking each column title (including Ctx) briefly flickers the panel and it
    re-mounts with the table reordered, both directions; the `Out $/M` sort arrow
    stays on the header line and `▲/▼` moves to the clicked column.
 6. The `[free]` chip toggles `[>>free]` / `[free]` and repaints the list live
    (via the same remount). There is no search box and no `[redraw]` chip.
+   The right-aligned `[update]` button switches to `[updating…]`, then the
+   panel remounts with fresh data and an update toast appears; on an empty
+   panel it fills the table.
 7. Hovering never activates or changes anything: activation requires
    press-and-release on the same target, and releasing over a different target
    does nothing. Press bookkeeping is module-scope, so clicks keep working even

@@ -46,7 +46,7 @@ import {
   f_resolveCacheTtls,
   type OverviewCache,
 } from "../services/cache";
-import { f_filterModels, type ModelFilterOptions } from "../services/model-filter";
+import { f_filterModels } from "../services/model-filter";
 import {
   f_getModelOverviewFromHost,
   f_refreshModelOverview,
@@ -58,7 +58,6 @@ import { f_sortModels } from "../services/ranking";
 import {
   f_formatContext,
   f_formatPrice,
-  f_formatRank,
   f_formatScore,
   f_formatTimestamp,
   f_truncate,
@@ -122,18 +121,13 @@ export interface TableColumn {
 }
 
 /**
- * `#rank score` when both exist; a lone value still renders. Proxy matches
- * (version/family stand-ins) get a `~` prefix and are never shown as exact.
+ * The reported score only (no rank). Proxy matches (version/family stand-ins)
+ * get a `~` prefix and are never shown as exact.
  */
 function fh_benchmarkText(p_benchmark: ModelBenchmark | null): string {
-  if (p_benchmark === null) return "—";
-  const vl_parts: string[] = [];
-  if (p_benchmark.rank !== null) vl_parts.push(f_formatRank(p_benchmark.rank));
-  if (p_benchmark.score !== null) vl_parts.push(f_formatScore(p_benchmark.score));
-  if (vl_parts.length === 0) return "—";
-  const vl_text = vl_parts.join(" ");
-  const vl_isProxy = p_benchmark.matchType === "family_fallback";
-  return vl_isProxy ? `~${vl_text}` : vl_text;
+  if (p_benchmark === null || p_benchmark.score === null) return "—";
+  const vl_text = f_formatScore(p_benchmark.score);
+  return p_benchmark.matchType === "family_fallback" ? `~${vl_text}` : vl_text;
 }
 
 /** One cell's display text for a row, keyed by its column. */
@@ -149,9 +143,10 @@ function fh_tableCell(p_model: ModelRecord, p_key: ModelSortKey): string {
       return f_formatPrice(p_model.pricing.inputUsdPerMillionTokens);
     case "outputPrice":
       return f_formatPrice(p_model.pricing.outputUsdPerMillionTokens);
-    case "llbmRank":
-    case "llbmScore":
-      return fh_benchmarkText(f_getBenchmarkForModel(p_model, "llbm"));
+    case "codingScore":
+      return fh_benchmarkText(f_getBenchmarkForModel(p_model, "llbmCoding"));
+    case "intelligenceScore":
+      return fh_benchmarkText(f_getBenchmarkForModel(p_model, "llbmIntelligence"));
     case "releaseDate":
       return p_model.releaseDate ?? "—";
   }
@@ -198,16 +193,19 @@ export const k_overviewUsage = "/mosp [toggle | status | update | redraw | sort 
 
 const k_sortTokenAliases: Readonly<Record<string, ModelSortKey>> = {
   ctx: "contextWindow",
-  llbm: "llbmRank",
+  coding: "codingScore",
+  intel: "intelligenceScore",
+  intelligence: "intelligenceScore",
   "input-price": "inputPrice",
   "output-price": "outputPrice",
 };
 
-/** Numeric and date columns read best descending on first selection. */
+/** Score, context, and date columns read best descending on first selection. */
 export function f_getDefaultSortDirection(p_key: ModelSortKey): SortDirection {
   if (
     p_key === "releaseDate" ||
-    p_key === "llbmScore" ||
+    p_key === "codingScore" ||
+    p_key === "intelligenceScore" ||
     p_key === "contextWindow"
   ) {
     return "desc";
@@ -227,13 +225,6 @@ export function f_nextSortState(
     };
   }
   return { sortKey: p_key, sortDirection: f_getDefaultSortDirection(p_key) };
-}
-
-/** Map controller state onto the service-layer filter options. */
-export function f_buildFilterOptions(p_filters: OverviewFilters): ModelFilterOptions {
-  return {
-    freeOnly: p_filters.freeOnly,
-  };
 }
 
 /** Filter then sort without mutating any input. */
@@ -284,9 +275,10 @@ export function f_getSortKeyLabel(p_key: ModelSortKey): string {
       return "Provider";
     case "releaseDate":
       return "Released";
-    case "llbmRank":
-    case "llbmScore":
-      return "LLBM";
+    case "codingScore":
+      return "Coding";
+    case "intelligenceScore":
+      return "Intel";
     case "contextWindow":
       return "Ctx";
     case "inputPrice":
@@ -297,24 +289,29 @@ export function f_getSortKeyLabel(p_key: ModelSortKey): string {
 }
 
 /**
- * Chip label: `[>>label]` when selected, `[>label]` when hovered by the
- * cursor, plain `[label]` otherwise. Selection wins over hover.
+ * Chip label: `[>>label]` when selected, plain `[label]` otherwise. (Hover
+ * markers were dropped with Adjustment 14: mounted subtrees never repaint.)
  */
-export function f_formatChipLabel(
-  p_selected: boolean,
-  p_hovered: boolean,
-  p_label: string,
-): string {
-  if (p_selected) return `[>>${p_label}]`;
-  if (p_hovered) return `[>${p_label}]`;
-  return `[${p_label}]`;
+export function f_formatChipLabel(p_selected: boolean, p_label: string): string {
+  return p_selected ? `[>>${p_label}]` : `[${p_label}]`;
+}
+
+/** Toolbar update button: `[updating…]` while a refresh runs, `[update]` otherwise. */
+export function f_formatUpdateLabel(p_loading: boolean): string {
+  return p_loading ? "[updating…]" : "[update]";
+}
+
+/** Empty-table hint; points at the toolbar button when nothing is loaded. */
+export function f_buildEmptyMessage(p_totalCount: number): string {
+  return p_totalCount === 0
+    ? "No models loaded — click [update] or run /mosp update"
+    : "No models match the current filters";
 }
 
 function fh_shortSource(p_source: string): string {
   if (p_source === "opencode-models") return "models";
   if (p_source === "opencode-pricing") return "pricing";
   if (p_source === "models-dev") return "models.dev";
-  if (p_source === "llbm") return "llbm";
   return p_source;
 }
 
@@ -370,16 +367,31 @@ function fh_describeFilters(p_filters: OverviewFilters): string {
   return vl_active.length > 0 ? vl_active.join(", ") : "none";
 }
 
-/** Compact sidebar strip: leader for the active ranking plus a hint. */
+/** Compact sidebar strip: the top LLMBM coding model plus the model count. */
 export function f_buildSidebarSummary(
   p_leader: ModelRecord | null,
   p_total: number,
 ): string {
-  if (p_leader === null) return `${p_total} models · no LLBM data`;
-  const vl_benchmark = f_getBenchmarkForModel(p_leader, "llbm");
-  const vl_rank = f_formatRank(vl_benchmark?.rank ?? null);
-  const vl_score = f_formatScore(vl_benchmark?.score ?? null);
-  return `${p_total} models · LLBM ${vl_rank} ${f_truncate(p_leader.name, 18)} ${vl_score}`;
+  if (p_leader === null) return `${p_total} models · no LLMBM data`;
+  const vl_benchmark = f_getBenchmarkForModel(p_leader, "llbmCoding");
+  return `${p_total} models · top coding ${f_truncate(p_leader.name, 18)} ${fh_benchmarkText(vl_benchmark)}`;
+}
+
+/** Model with the highest LLMBM coding score; `null` when none is scored. */
+export function f_findLeader(p_models: readonly ModelRecord[]): ModelRecord | null {
+  let vl_leader: ModelRecord | null = null;
+  let vl_best = -1;
+
+  for (const vl_model of p_models) {
+    const vl_score = f_getBenchmarkForModel(vl_model, "llbmCoding")?.score ?? null;
+
+    if (vl_score !== null && vl_score > vl_best) {
+      vl_leader = vl_model;
+      vl_best = vl_score;
+    }
+  }
+
+  return vl_leader;
 }
 
 /** Short snapshot description for update toasts. */
@@ -400,7 +412,8 @@ export interface OverviewController {
   readonly loading: Accessor<boolean>;
   readonly lastError: Accessor<string | null>;
   readonly rows: Accessor<OverviewDerivedRows>;
-  readonly rankingLeader: Accessor<ModelRecord | null>;
+  /** Highest LLMBM coding score (sidebar summary); `null` without data. */
+  readonly leader: Accessor<ModelRecord | null>;
   /** Whether header-click collapse is enabled (env-gated, default off). */
   readonly headerCollapseEnabled: boolean;
   readonly toggleFreeOnly: () => void;
@@ -461,9 +474,9 @@ export function f_createOverviewController(
   };
 
   // Controller-owned signals: the rendering source of truth.
-  const [vl_sortKey, vl_setSortKey] = createSignal<ModelSortKey>("llbmRank");
-  const [vl_sortDirection, vl_setSortDirection] = createSignal<SortDirection>("asc");
-  const [vl_collapsed, vl_setCollapsed] = createSignal<boolean>(false);
+  const [vl_sortKey, vl_setSortKey] = createSignal<ModelSortKey>(vl_initialSortKey);
+  const [vl_sortDirection, vl_setSortDirection] = createSignal<SortDirection>(vl_initialSortDirection);
+  const [vl_collapsed, vl_setCollapsed] = createSignal<boolean>(vl_initialCollapsed);
   const [vl_filters, vl_setFilters] = createSignal<OverviewFilters>(vl_initialFilters);
   const [vl_snapshot, vl_setSnapshot] = createSignal<ModelOverviewSnapshot | undefined>(undefined);
   const [vl_loading, vl_setLoading] = createSignal(false);
@@ -483,12 +496,7 @@ export function f_createOverviewController(
     );
     return vl_derived;
   });
-  const vl_rankingLeader = createMemo(() => {
-    const vl_models = vl_snapshot()?.models ?? [];
-    // Default to LLMBM rank
-    const vl_key: ModelSortKey = "llbmRank";
-    return f_sortModels(vl_models, vl_key, "asc")[0] ?? null;
-  });
+  const vl_leader = createMemo(() => f_findLeader(vl_snapshot()?.models ?? []));
 
   // The host never repaints a mounted plugin subtree (verified 2026-10-25:
   // imperative node writes execute, but pixels only refresh on a new mount).
@@ -518,7 +526,7 @@ export function f_createOverviewController(
     });
   }
 
-  function f_toggleFreeOnly(): void {
+  function fh_toggleFreeOnly(): void {
     const vl_next = !vl_filters().freeOnly;
     vl_setFilters((p_current) => ({ ...p_current, freeOnly: vl_next }));
     void vl_setFiltersStore((draft) => {
@@ -527,7 +535,7 @@ export function f_createOverviewController(
     fh_pokeRender();
   }
 
-  function f_clearFilters(): void {
+  function fh_clearFilters(): void {
     vl_setFilters({ freeOnly: false });
     void vl_setFiltersStore((draft) => {
       draft.freeOnly = false;
@@ -535,7 +543,7 @@ export function f_createOverviewController(
     fh_pokeRender();
   }
 
-  function f_toggleSort(p_key: ModelSortKey): void {
+  function fh_toggleSort(p_key: ModelSortKey): void {
     const vl_next = f_nextSortState(fh_preferencesSnapshot(), p_key);
     vl_setSortKey(vl_next.sortKey);
     vl_setSortDirection(vl_next.sortDirection);
@@ -546,7 +554,7 @@ export function f_createOverviewController(
     fh_pokeRender();
   }
 
-  function f_toggleCollapsed(): void {
+  function fh_toggleCollapsed(): void {
     if (!vl_headerCollapseEnabled) return;
     const vl_next = !vl_collapsed();
     vl_setCollapsed(vl_next);
@@ -607,7 +615,7 @@ export function f_createOverviewController(
     );
   }
 
-  async function fh_loadLlbm(
+  function fh_loadLlbm(
     p_loadContext: OverviewLoadContext,
   ): Promise<AdapterResult<readonly ModelBenchmark[]>> {
     return f_fetchLlbmBenchmarks({
@@ -616,7 +624,7 @@ export function f_createOverviewController(
     });
   }
 
-  async function fh_loadModelsDev(
+  function fh_loadModelsDev(
     p_loadContext: OverviewLoadContext,
   ): Promise<AdapterResult<ModelsDevCrosswalk>> {
     return f_fetchModelsDevCrosswalk({
@@ -625,7 +633,7 @@ export function f_createOverviewController(
     });
   }
 
-  async function f_loadSnapshot(): Promise<void> {
+  async function fh_loadSnapshot(): Promise<void> {
     try {
       vl_setSnapshot(
         await f_getModelOverviewFromHost({
@@ -640,10 +648,12 @@ export function f_createOverviewController(
     }
   }
 
-  async function f_refresh(p_force: boolean): Promise<ModelOverviewSnapshot | undefined> {
+  async function fh_refresh(p_force: boolean): Promise<ModelOverviewSnapshot | undefined> {
     if (vl_loading()) return vl_snapshot();
     vl_setLoading(true);
     vl_setLastError(null);
+    // Paint `[updating…]` now; the export fetch can take several seconds.
+    fh_pokeRender();
     try {
       const vl_ttls = f_resolveCacheTtls();
       const vl_next = await f_refreshModelOverview({
@@ -657,10 +667,17 @@ export function f_createOverviewController(
         timeoutMs: f_resolveRequestTimeoutMs(),
       });
       vl_setSnapshot(vl_next);
+      if (vl_next.models.length === 0) {
+        // Nothing usable from the refresh (e.g. the host catalog was still
+        // empty during sync): fall back to the host-first read so an empty
+        // panel recovers as soon as the host lists models.
+        await fh_loadSnapshot();
+        return vl_snapshot();
+      }
       return vl_next;
     } catch {
       vl_setLastError("refresh failed unexpectedly");
-      await f_loadSnapshot();
+      await fh_loadSnapshot();
       return vl_snapshot();
     } finally {
       vl_setLoading(false);
@@ -679,13 +696,13 @@ export function f_createOverviewController(
     loading: vl_loading,
     lastError: vl_lastError,
     rows: vl_rows,
-    rankingLeader: vl_rankingLeader,
+    leader: vl_leader,
     headerCollapseEnabled: vl_headerCollapseEnabled,
-    toggleFreeOnly: f_toggleFreeOnly,
-    clearFilters: f_clearFilters,
-    toggleSort: f_toggleSort,
-    toggleCollapsed: f_toggleCollapsed,
-    loadSnapshot: f_loadSnapshot,
-    refresh: f_refresh,
+    toggleFreeOnly: fh_toggleFreeOnly,
+    clearFilters: fh_clearFilters,
+    toggleSort: fh_toggleSort,
+    toggleCollapsed: fh_toggleCollapsed,
+    loadSnapshot: fh_loadSnapshot,
+    refresh: fh_refresh,
   };
 }

@@ -76,37 +76,42 @@ OpenCode plugin presenting a **collapsible model overview panel** with a searcha
 available to the current installation, merging:
 - **availability + metadata** (OpenCode model registry: provider, model ID, name, context limit, release date where present);
 - **pricing** normalized to **USD per 1M input/output tokens** (from the registry's cost data, verified);
-- **benchmarks**: **GPQA (primary ranking)** and **LiveCodeBench (alternative ranking)** as external adapters with
-  provenance (source URL, evaluation/retrieval timestamps), score ≠ rank, missing = `N/A` — never fabricated.
+- **benchmarks** (current, Adjustment 22): two LLMBenchmark.ai metrics as separate columns — `Coding`
+  (`aa_coding_index`) and `Intel` (`aa_intelligence_index`) — with provenance (source URL, observed date);
+  reported values only, no ranks; missing = `—` — never fabricated. *(Originally specified as GPQA primary +
+  LiveCodeBench alternative rankings; replaced in Adjustments 19–22.)*
 
-Interactions: click-collapse + command toggle (state survives collapse), ranking selector, asc/desc column sorts,
-search by name/provider/ID, optional filters, refresh with loading/empty/stale/partial/error states, source
-freshness display, deterministic stable sorting (missing values last in both directions).
+Interactions: command toggle (header-click collapse opt-in), asc/desc column sorts, free filter, explicit
+update with loading/empty/stale/partial/error states, source freshness display, deterministic stable sorting
+(missing values last in both directions). *(The ranking selector and search were removed in Adjustments 8/11.)*
 
 ---
 
 ## 5. Repository structure (KNOWLEDGE_03 §4, adapted to verified API)
 
+Current layout (as of Adjustment 22; the original KNOWLEDGE_03 sketch with
+GPQA/LiveCodeBench providers is superseded):
+
 ```
 opencode_model_overview/
 ├── .envrc / .env.example / .editorconfig / .npmrc / bunfig.toml
-├── .github/workflows/ci.yml
+├── .opencode/plugins/model-overview/{index,tui}.ts   # dev loader (thin re-exports)
 ├── docs/                      # knowledge docs + everything below
-│   ├── architecture/{overview,data-flow,ui-integration,caching,decisions}.md
-│   ├── api/{opencode-models,opencode-pricing,huggingface-gpqa,livecodebench}.md
-│   └── {development,naming-conventions,testing,release}.md
-├── scripts/{refresh-benchmarks.ts,validate-data.ts}
+│   ├── architecture/{data-flow,ui-integration,caching}.md
+│   ├── api/{opencode-models,opencode-pricing,llmbenchmark,models-dev}.md
+│   └── {development,naming-conventions,llmbm-migration-plan}.md
+├── scripts/{generate-mappings,validate-mappings,live-data}.ts   # network-only tools
 ├── src/
 │   ├── index.ts               # server plugin (Plugin.define, id "opencode_model_overview")
 │   ├── tui.tsx                # CLI plugin: slots, panel, commands, table renderer
-│   ├── config/config.ts
-│   ├── domain/{model,benchmark,pricing}.ts
-│   ├── providers/{opencode-models,opencode-pricing,huggingface-gpqa,livecodebench}.ts
-│   ├── services/{model-overview,model-matching,ranking,cache}.ts
-│   ├── ui/{panel-controller,table,state}.ts(x)
-│   └── utils/{fetch-json,logger,result}.ts
-├── tests/{unit,integration,fixtures}/
-├── package.json  tsconfig.json  eslint.config.js  README.md  CHANGELOG.md  LICENSE
+│   ├── config/llbm-mappings.ts
+│   ├── domain/{guards,model-record,model-benchmark,model-pricing,model-sort,source-status}.ts
+│   ├── providers/{opencode-models,opencode-pricing,llbm,models-dev,adapter-result}.ts
+│   ├── services/{model-overview,model-matching,model-filter,ranking,cache}.ts
+│   ├── ui/{panel-controller,format}.ts
+│   └── utils/fetch-json.ts
+├── tests/{unit,fixtures}/
+├── package.json  tsconfig.json  eslint.config.js  README.md  LICENSE
 ```
 
 Entry-point decision (KNOWLEDGE_03 §4): keep `src/` as source of truth; for local development, load via a
@@ -120,7 +125,7 @@ TUI plugin. Final form = publishable package with `"./tui"` export + `plugins` e
 
 - `f_` exported/runtime functions · `fh_` helpers · `g_` globals (shared mutable only; prefer DI) · `k_` constants
   · `p_` parameters (even in short callbacks) · `vl_` local variables · `v_` other runtime vars
-- Types/interfaces **PascalCase**; string unions descriptive (`"gpqa"`); files **kebab-case**.
+- Types/interfaces **PascalCase**; string unions descriptive (`"llbmCoding"`); files **kebab-case**.
 - Strict TypeScript (flags per §5.4 incl. `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`);
   no `any`; `unknown` + validation at external-data boundaries; explicit return types on exports;
   no global rule disables; no default exports except where the plugin loader requires them.
@@ -554,10 +559,54 @@ Owner decisions (verbatim): "Corrected table (Recommended)" +
   sharing, three-way validator); `data-flow.md` and `models-dev.md` numbers and
   rules updated.
 
+### Adjustment 22 — two LLMBM metric columns, no ranks, cleanup (owner request, 2026-10-26)
+
+Owner request (verbatim): "we have to fix those still missing mappings and to update the whole docs, in
+code comments and in docs; also invalid code has to be fixed and reduced in complexity if possible; No Git
+Commits allowed". Live check: of 79 non-null mappings, 47 PASS / 32 PENDING / 0 DRIFT — the 32 were mapped
+correctly but had no `aa_coding_index` row; 74 had `aa_intelligence_index`. Owner decisions (verbatim):
+"Lets make two columns - one shots coding index, the other shows intelligence index"; ranks: "no rank, only
+metrics"; nulls: "Map beam-free".
+
+- Domain: `BenchmarkId = "llbmCoding" | "llbmIntelligence"` with `k_llbmMetricByBenchmark`; `rank` removed
+  from `ModelBenchmark`; `alias` match type, `RankingMode`, `k_llbmMetric`, `f_isBenchmarkMatchType` removed.
+  Sort keys `codingScore` / `intelligenceScore`; default `codingScore` desc.
+- Adapter: one export pass parses both metrics; fails only when neither yields rows;
+  `OPENCODE_LLM_BENCH_METRIC` removed. Cache: one `llbm` entry for both ids; schema version 2.
+- Matching simplified: alias stub/param and `model-aliases.ts` deleted, one attach helper, synchronous API;
+  attached rows now **merge** with existing ones (`duplicate-benchmark` instead of silent overwrite).
+  `f_assignBenchmarkRanks` and `f_formatRank` removed.
+- UI: `Coding` + `Intel` columns (8 cells each; Ctx hides < 98, Provider < 82), `/mosp sort coding|intel`,
+  sidebar shows the top coding model. **Bug fix:** persisted sort/collapse preferences were ignored at startup
+  (signals were seeded with hard-coded defaults). Dead `f_buildFilterOptions`, hover arg of
+  `f_formatChipLabel`, no-op branches removed; non-exported `f_*` closures renamed `fh_*`.
+- Mappings: `beam-free` → `reflection/beam-1.0-501b-a23b` (`family_fallback`). Live result:
+  **74 PASS (coding 47, intelligence 74), 6 PENDING, 0 DRIFT**; `big-pickle`, `flint-40b-free` stay `null`.
+- Scripts: shared `scripts/live-data.ts`; the validator parses through the production adapter (PASS now
+  matches what attaches) and reports per-metric coverage.
+- Docs: `llmbenchmark.md`, `data-flow.md` rewritten; `caching.md`, `ui-integration.md`, `development.md`,
+  `models-dev.md`, `naming-conventions.md`, fixtures README, `.envrc`/`.env.example` (HF token removed),
+  §4/§5/§8/§10 of this plan updated; `llmbm-migration-plan.md` marked superseded; README written.
+- Gate: `bun run check` green — **159 tests / 547 assertions**, 0 fail (rank-derivation and metric-override
+  tests removed; two-metric, merge/duplicate, leader, and intelligence-only tests added). Live
+  `validate:mappings --skip-catalog`: OK, 0 DRIFT. Owner visual check pending. No commits made.
+
+### Adjustment 23 — toolbar update button (owner request, 2026-10-26)
+
+Owner (verbatim): "add a update button right alidgned to the same line as filters that will update the list
+especially if panel / sidebar appeared but no models visible".
+
+- `src/tui.tsx`: the filter row gains a right-aligned `[update]` button (flex spacer) wired to the same
+  handler as `/mosp update` (forced refresh + toast); shows `[updating…]` and ignores presses while loading.
+- `src/ui/panel-controller.ts`: `f_formatUpdateLabel`, `f_buildEmptyMessage` ("No models loaded — click
+  [update] or run /mosp update"); `refresh` repaints immediately when it starts and, if the refreshed
+  snapshot has no models, falls back to the host-first read so an empty panel recovers.
+- Tests +2; docs: `ui-integration.md` (panel behaviour + checklist), README.
+
 ### Phase 7 — Testing, security, CI
-Unit suite (normalization, aliases, price units incl. no double-scaling, score→rank, sort directions/ties/missing,
+Unit suite (normalization, reviewed mappings, price units incl. no double-scaling, sort directions/ties/missing,
 filters, TTL, malformed/timeout/HTTP errors) + integration scenarios with mocked HTTP & committed fixtures (§14.2 list)
-+ UI smoke checks (§14.3). Security: no secrets in logs/code/fixtures; HF token never sent to other origins; env validated
++ UI smoke checks (§14.3). Security: no secrets in logs/code/fixtures (no current source needs a token); env validated
 at actual plugin runtime (direnv ≠ GUI-process env). GitHub Actions: `bun install --frozen-lockfile && typecheck && lint && test`
 (CI never autofixes).
 - **Gate:** full pipeline green; feasibility PoC still valid on the targeted release.
@@ -576,12 +625,12 @@ final diff review + report of commands for the owner.
 1. Plugin loads in targeted OpenCode without runtime errors
 2. All models from the selected discovery mechanism represented
 3. Prices normalized to USD/1M in/out from verified source
-4. GPQA carries variant + source + evaluation metadata where available
-5. LiveCodeBench selectable independently of GPQA
+4. Benchmark rows carry variant (metric) + source URL + observed date where available
+5. LLMBM coding and intelligence scores shown and sortable independently
 6. No fabricated scores/prices for missing data
 7. Every requested column sortable both directions
 8. Sorting deterministic; missing values last
-9. Search/filters operate on normalized records
+9. Filters operate on normalized records (search removed, Adjustment 11)
 10. Collapse/expand via verified native mechanism
 11. Menu/command toggle exists
 12. Source failures isolated; stale-data status shown
@@ -606,5 +655,6 @@ final diff review + report of commands for the owner.
    (vs. sidebar-only). Current plan assumes the recommended option.
 2. **Pricing source** — registry `Model.Info.cost` first (verify units); external catalog only if Phase 1 finds the
    registry insufficient. Treat `inference/v1/models` as availability info, not a pricing guarantee.
-3. **GPQA dataset ID + LiveCodeBench source** — must be pinned by Phase 1 evidence, not guessed.
+3. ~~**GPQA dataset ID + LiveCodeBench source**~~ — closed: both replaced by LLMBM `/v1/export`
+   (Adjustments 19–22; see `docs/api/llmbenchmark.md`).
 4. **Local dev loading** — thin `.opencode/plugins/` entry re-exporting `src/` (recommended) vs. build-copy step.

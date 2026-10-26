@@ -6,22 +6,22 @@ import {
   f_createTestModel,
 } from "./test-models";
 
-const k_gpqaModel = f_createTestModel({
+const k_scoredModel = f_createTestModel({
   modelId: "llbm-model",
   name: "Scored Model",
   canonicalId: "canonical-llbm",
   benchmarks: [
-    f_createTestBenchmark("llbm", 80, { sourceModelId: "llbm-model" }),
+    f_createTestBenchmark("llbmCoding", 80, { sourceModelId: "llbm-model" }),
   ],
 });
 
-const k_lcbOnlyModel = f_createTestModel({
+const k_otherProviderModel = f_createTestModel({
   modelId: "llbm-only",
   name: "Coding Model",
   providerId: "other",
   providerName: "Other Provider",
   benchmarks: [
-    f_createTestBenchmark("llbm", 50, {
+    f_createTestBenchmark("llbmCoding", 50, {
       sourceModelId: "llbm-only",
     }),
   ],
@@ -53,13 +53,13 @@ const k_freeModel = f_createTestModel({
 
 describe("f_filterModels", () => {
   test("returns every record when no filter is set", () => {
-    const vl_models = [k_gpqaModel, k_lcbOnlyModel, k_missingModel];
+    const vl_models = [k_scoredModel, k_otherProviderModel, k_missingModel];
 
     expect(f_filterModels(vl_models)).toEqual(vl_models);
   });
 
   test("filters by exact provider ID", () => {
-    const vl_models = [k_gpqaModel, k_lcbOnlyModel, k_freeModel];
+    const vl_models = [k_scoredModel, k_otherProviderModel, k_freeModel];
 
     expect(
       f_filterModels(vl_models, { providerIds: ["free-provider"] }).map(
@@ -69,7 +69,7 @@ describe("f_filterModels", () => {
   });
 
   test("shows only explicitly free models", () => {
-    const vl_models = [k_gpqaModel, k_lcbOnlyModel, k_missingModel, k_freeModel];
+    const vl_models = [k_scoredModel, k_otherProviderModel, k_missingModel, k_freeModel];
 
     expect(
       f_filterModels(vl_models, { freeOnly: true }).map(
@@ -98,23 +98,23 @@ describe("f_filterModels", () => {
   });
 
   test("filters on LLMBM presence and absence", () => {
-    const vl_models = [k_gpqaModel, k_lcbOnlyModel, k_missingModel];
+    const vl_models = [k_scoredModel, k_otherProviderModel, k_missingModel];
 
     expect(
       f_filterModels(vl_models, {
-        benchmarkPresence: { scope: "llbm", state: "present" },
+        benchmarkPresence: { scope: "llbmCoding", state: "present" },
       }).map((p_model) => p_model.modelId),
     ).toEqual(["llbm-model", "llbm-only"]);
 
     expect(
       f_filterModels(vl_models, {
-        benchmarkPresence: { scope: "llbm", state: "missing" },
+        benchmarkPresence: { scope: "llbmCoding", state: "missing" },
       }).map((p_model) => p_model.modelId),
     ).toEqual(["missing-model"]);
   });
 
   test("filters on any benchmark presence", () => {
-    const vl_models = [k_gpqaModel, k_lcbOnlyModel, k_missingModel];
+    const vl_models = [k_scoredModel, k_otherProviderModel, k_missingModel];
 
     expect(
       f_filterModels(vl_models, {
@@ -127,7 +127,7 @@ describe("f_filterModels", () => {
     const vl_nullScore = f_createTestModel({
       modelId: "null-score",
       benchmarks: [
-        f_createTestBenchmark("llbm", null, {
+        f_createTestBenchmark("llbmCoding", null, {
           sourceModelId: "null-score",
         }),
       ],
@@ -135,24 +135,24 @@ describe("f_filterModels", () => {
 
     expect(
       f_filterModels([vl_nullScore], {
-        benchmarkPresence: { scope: "llbm", state: "present" },
+        benchmarkPresence: { scope: "llbmCoding", state: "present" },
       }),
     ).toEqual([]);
   });
 
   test("composes filters with AND semantics", () => {
-    const vl_models = [k_gpqaModel, k_lcbOnlyModel, k_missingModel, k_freeModel];
+    const vl_models = [k_scoredModel, k_otherProviderModel, k_missingModel, k_freeModel];
 
     expect(
       f_filterModels(vl_models, {
         providerIds: ["other"],
-        benchmarkPresence: { scope: "llbm", state: "present" },
+        benchmarkPresence: { scope: "llbmCoding", state: "present" },
       }).map((p_model) => p_model.modelId),
     ).toEqual(["llbm-only"]);
   });
 
   test("does not mutate the input array", () => {
-    const vl_models = [k_gpqaModel, k_lcbOnlyModel];
+    const vl_models = [k_scoredModel, k_otherProviderModel];
 
     const vl_filtered = f_filterModels(vl_models);
 

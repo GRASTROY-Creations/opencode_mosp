@@ -3,8 +3,8 @@ import { Plugin } from "@opencode/plugin";
 /**
  * Server-side plugin entry point.
  *
- * Phase 0 skeleton: intentionally inert. Model/pricing discovery and any
- * shared server behavior land here in later phases (docs/PLAN.md §7).
+ * Intentionally inert: all model, pricing, and benchmark work happens in the
+ * TUI plugin; this entry exists so the package exposes both plugin halves.
  * The interactive UI lives in `src/tui.tsx` (`@opencode/plugin/tui`).
  *
  * Default export is required by the OpenCode plugin loader — the one

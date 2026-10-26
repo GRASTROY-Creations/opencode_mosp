@@ -7,20 +7,24 @@
  * verified equivalent exists (anonymized rebrand, unscored internal model,
  * or a source string that does not exist at all).
  *
+ * One entry serves both LLMBM columns: the same `llbmId` is looked up for the
+ * coding (`aa_coding_index`) and intelligence (`aa_intelligence_index`)
+ * metrics, so a model shows whichever of the two the source has scored.
+ *
  * `family_fallback` entries are sibling proxies (e.g. a `-free` or codex
  * variant pointing at its base model). They share the source row with the
  * `exact` owner via the Adjustment 21 sharing rule and render with a `~`
  * prefix; they must never be presented as the model's own score.
  *
- * REBUILT 2026-10-25 from the live `/v1/export` (metric aa_coding_index):
- * KNOWLEDGE_09's table was validated entry-by-entry — eleven dash-form
- * Claude ids were corrected to their live dot-form (six scored today, five
- * present but still unscored), and only the three anonymized rebrands
- * (`beam-free`, `big-pickle`, `flint-40b-free`) remain `null`. Entries whose
- * source model exists in the dataset but has no aa_coding_index row yet are
- * kept (PENDING) and attach automatically once scored. Refresh what is
- * auto-resolvable with `bun run generate:mappings`; drift is checked by
- * `bun run validate:mappings` (PASS/PENDING/DRIFT).
+ * State 2026-10-26 (live `/v1/export`, Adjustment 22): 82 entries, 80 with a
+ * source id. Coding scored 47, intelligence scored 74 (every coding-scored
+ * entry is also intelligence-scored), so 74 entries carry a value. PENDING (in `dataset.models`, no score in either metric):
+ * `beam-free` (→ Reflection Beam 1.0), `gpt-5.4-pro`, `gpt-5.5-pro`,
+ * `muse-wonder-1.0`, `qwen3.5-plus`, `qwen3.8-flash`; they attach
+ * automatically once scored. Only `big-pickle` and `flint-40b-free` stay
+ * `null` (no candidate in the dataset). Refresh what is auto-resolvable with
+ * `bun run generate:mappings`; drift is checked by `bun run validate:mappings`
+ * (PASS/PENDING/DRIFT).
  */
 
 export interface LlbmMapping {
@@ -30,7 +34,7 @@ export interface LlbmMapping {
 }
 
 export const k_llbmMappings: readonly LlbmMapping[] = [
-  { opencodeId: "opencode/beam-free", llbmId: null, matchType: "exact" },
+  { opencodeId: "opencode/beam-free", llbmId: "reflection/beam-1.0-501b-a23b", matchType: "family_fallback" },
   { opencodeId: "opencode/big-pickle", llbmId: null, matchType: "exact" },
 
   { opencodeId: "opencode/claude-fable-5", llbmId: "anthropic/claude-fable-5", matchType: "exact" },

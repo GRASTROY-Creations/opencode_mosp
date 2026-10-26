@@ -227,8 +227,8 @@ function fh_validateBenchmarks(
       return vl_benchmark;
     }
 
-    // One row per benchmark in 0.1.0. Duplicates would make score/rank
-    // lookups order-dependent and hide a bad merge.
+    // At most one row per benchmark id. Duplicates would make score lookups
+    // order-dependent and hide a bad merge.
     if (vl_seenIds.has(vl_benchmark.value.benchmarkId)) {
       return f_fail(
         `model.benchmarks contains duplicate ${vl_benchmark.value.benchmarkId} entries`,

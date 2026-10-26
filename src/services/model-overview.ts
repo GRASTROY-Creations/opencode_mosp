@@ -8,7 +8,8 @@
  *   recorded in status and never discards another source's data.
  * - A failed refresh keeps the last-known-good cache entry; its state becomes
  *   `stale` rather than disappearing.
- * - Benchmark rows are matched conservatively and ranked only after attaching.
+ * - Benchmark rows are matched conservatively; only reported scores are shown
+ *   (no ranks are derived).
  *
  * The OpenCode registry payload carries model prices together with the catalog,
  * so `opencode-pricing` is a derived source view rather than a second request.
@@ -22,6 +23,7 @@ import {
   type ModelBenchmark,
 } from "../domain/model-benchmark";
 import {
+  f_hasPublishedPrice,
   type ModelPricing,
   type ModelPricingTier,
 } from "../domain/model-pricing";
@@ -61,10 +63,8 @@ import {
   type BenchmarkMatch,
   type UnmatchedBenchmark,
 } from "./model-matching";
-import { f_assignBenchmarkRanks, f_sortModels } from "./ranking";
-import { f_filterModels } from "./model-filter";
 
-export { f_matchBenchmarkRecords, f_sortModels, f_filterModels };
+
 
 /** Default request budget when a caller does not supply one. */
 export const k_defaultRequestTimeoutMs = 10_000;
@@ -162,7 +162,7 @@ export async function f_getModelOverview(
   const [vl_models, vl_llbm, vl_modelsDev] =
     await fh_readAllSources(p_options.cache, vl_now);
 
-  return await fh_assembleSnapshot(
+  return fh_assembleSnapshot(
     vl_models,
     vl_llbm,
     vl_modelsDev,
@@ -207,11 +207,11 @@ export async function f_getModelOverviewFromHost(
   }
 
   const [vl_llbm, vl_modelsDev] = await Promise.all([
-    fh_readBenchmarks(p_options.cache, "llbm", vl_now),
+    fh_readBenchmarks(p_options.cache, vl_now),
     fh_readModelsDev(p_options.cache, vl_now),
   ]);
 
-  return await fh_assembleSnapshot(
+  return fh_assembleSnapshot(
     vl_models,
     vl_llbm,
     vl_modelsDev,
@@ -489,7 +489,7 @@ async function fh_performRefresh(
 
   await Promise.all(vl_jobs.map((p_job) => p_job.run()));
 
-  return await fh_assembleSnapshot(
+  return fh_assembleSnapshot(
     vl_models,
     vl_llbm,
     vl_modelsDev,
@@ -498,28 +498,27 @@ async function fh_performRefresh(
   );
 }
 
-async function fh_assembleSnapshot(
+function fh_assembleSnapshot(
   p_models: SourceRead<readonly ModelRecord[]>,
   p_llbm: SourceRead<readonly ModelBenchmark[]>,
   p_modelsDev: SourceRead<ModelsDevCrosswalk>,
   p_cacheKey: string,
   p_warnings: readonly OverviewWarning[],
-): Promise<ModelOverviewSnapshot> {
+): ModelOverviewSnapshot {
   const vl_sourceModels = p_models.value === null ? [] : p_models.value;
   const vl_merged = f_mergeModelSources([vl_sourceModels]);
   const vl_benchmarks: readonly ModelBenchmark[] =
     p_llbm.value === null ? [] : p_llbm.value;
-  const vl_match = await f_matchBenchmarkRecords(vl_merged, vl_benchmarks);
-  const vl_ranked = f_assignBenchmarkRanks(vl_match.models);
+  const vl_match = f_matchBenchmarkRecords(vl_merged, vl_benchmarks);
 
   return {
-    models: vl_ranked,
+    models: vl_match.models,
     status: fh_buildStatus(
       p_cacheKey,
       p_models,
       p_llbm,
       p_modelsDev,
-      vl_ranked,
+      vl_match.models,
     ),
     matches: vl_match.matches,
     unmatched: vl_match.unmatched,
@@ -532,11 +531,11 @@ function fh_buildStatus(
   p_models: SourceRead<readonly ModelRecord[]>,
   p_llbm: SourceRead<readonly ModelBenchmark[]>,
   p_modelsDev: SourceRead<ModelsDevCrosswalk>,
-  p_rankedModels: readonly ModelRecord[],
+  p_matchedModels: readonly ModelRecord[],
 ): ModelOverviewStatus {
   const vl_sources: readonly SourceStatus[] = [
     fh_createStatus("opencode-models", p_models, p_cacheKey),
-    fh_createPricingStatus(p_models, p_rankedModels, p_cacheKey),
+    fh_createPricingStatus(p_models, p_matchedModels, p_cacheKey),
     fh_createStatus("llbm", p_llbm, p_cacheKey),
     fh_createStatus("models-dev", p_modelsDev, p_cacheKey),
   ];
@@ -569,11 +568,11 @@ function fh_createStatus<T>(
 
 function fh_createPricingStatus(
   p_models: SourceRead<readonly ModelRecord[]>,
-  p_rankedModels: readonly ModelRecord[],
+  p_matchedModels: readonly ModelRecord[],
   p_cacheKey: string,
 ): SourceStatus {
-  const vl_hasPublishedPrice = p_rankedModels.some((p_model) =>
-    fh_hasPublishedPrice(p_model.pricing),
+  const vl_hasPublishedPrice = p_matchedModels.some((p_model) =>
+    f_hasPublishedPrice(p_model.pricing),
   );
 
   if (p_models.value === null) {
@@ -655,7 +654,7 @@ async function fh_readAllSources(
 > {
   return Promise.all([
     fh_readModels(p_cache, p_now),
-    fh_readBenchmarks(p_cache, "llbm", p_now),
+    fh_readBenchmarks(p_cache, p_now),
     fh_readModelsDev(p_cache, p_now),
   ]);
 }
@@ -709,21 +708,18 @@ async function fh_readModelsDev(
   );
 }
 
+/** Read the single `llbm` cache entry (rows for every LLMBM benchmark id). */
 async function fh_readBenchmarks(
   p_cache: OverviewCache,
-  p_benchmarkId: BenchmarkId,
   p_now: Date,
 ): Promise<SourceRead<readonly ModelBenchmark[]>> {
-  const vl_read = await p_cache.read(p_benchmarkId, p_now);
+  const vl_read = await p_cache.read("llbm", p_now);
 
   if (!vl_read.ok) {
     return fh_failedRead(vl_read.reason);
   }
 
-  const vl_parsed = fh_parseCachedBenchmarks(
-    vl_read.value.envelope.payload,
-    p_benchmarkId,
-  );
+  const vl_parsed = fh_parseCachedBenchmarks(vl_read.value.envelope.payload);
 
   if (!vl_parsed.ok) {
     return fh_invalidPayload(
@@ -806,7 +802,6 @@ function fh_parseCachedModelsDev(
 
 function fh_parseCachedBenchmarks(
   p_payload: unknown,
-  p_benchmarkId: BenchmarkId,
 ): DomainResult<readonly ModelBenchmark[]> {
   if (!Array.isArray(p_payload)) {
     return f_fail("cached benchmarks must be an array");
@@ -821,12 +816,6 @@ function fh_parseCachedBenchmarks(
     if (!vl_benchmark.ok) {
       return f_fail(
         `cached benchmark at index ${vl_index}: ${vl_benchmark.error}`,
-      );
-    }
-
-    if (vl_benchmark.value.benchmarkId !== p_benchmarkId) {
-      return f_fail(
-        `cached benchmarks for ${String(p_benchmarkId)} contain ${String(vl_benchmark.value.benchmarkId)}`,
       );
     }
 
@@ -1138,18 +1127,6 @@ function fh_mergeBenchmarks(
     .filter((p_benchmark): p_benchmark is ModelBenchmark =>
       p_benchmark !== undefined,
     );
-}
-
-function fh_hasPublishedPrice(p_pricing: ModelPricing): boolean {
-  return (
-    p_pricing.inputUsdPerMillionTokens !== null ||
-    p_pricing.outputUsdPerMillionTokens !== null ||
-    p_pricing.tiers.some(
-      (p_tier) =>
-        p_tier.inputUsdPerMillionTokens !== null ||
-        p_tier.outputUsdPerMillionTokens !== null,
-    )
-  );
 }
 
 function fh_resolveNow(p_now: (() => Date) | undefined): Date {

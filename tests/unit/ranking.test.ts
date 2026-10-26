@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  f_assignBenchmarkRanks,
   f_compareModels,
   f_sortModels,
 } from "../../src/services/ranking";
@@ -83,45 +82,47 @@ describe("f_sortModels", () => {
     }
   });
 
-  test("treats rank and score as distinct operations", () => {
-    const vl_highScore = f_createTestModel({
-      modelId: "high-score",
+  test("sorts the coding and intelligence columns independently", () => {
+    const vl_coder = f_createTestModel({
+      modelId: "coder",
       benchmarks: [
-        f_createTestBenchmark("llbm", 90, { sourceModelId: "high-score", rank: 2 }),
+        f_createTestBenchmark("llbmCoding", 90, { sourceModelId: "coder" }),
+        f_createTestBenchmark("llbmIntelligence", 40, { sourceModelId: "coder" }),
       ],
     });
-    const vl_topRank = f_createTestModel({
-      modelId: "top-rank",
+    const vl_thinker = f_createTestModel({
+      modelId: "thinker",
       benchmarks: [
-        f_createTestBenchmark("llbm", 80, { sourceModelId: "top-rank", rank: 1 }),
+        f_createTestBenchmark("llbmCoding", 80, { sourceModelId: "thinker" }),
+        f_createTestBenchmark("llbmIntelligence", 60, { sourceModelId: "thinker" }),
       ],
     });
 
     expect(
-      f_sortModels(
-        [vl_topRank, vl_highScore],
-        "llbmRank",
-        "asc",
-      ).map((p_model) => p_model.modelId),
-    ).toEqual(["top-rank", "high-score"]);
+      f_sortModels([vl_thinker, vl_coder], "codingScore", "desc").map(
+        (p_model) => p_model.modelId,
+      ),
+    ).toEqual(["coder", "thinker"]);
 
     expect(
-      f_sortModels(
-        [vl_topRank, vl_highScore],
-        "llbmScore",
-        "desc",
-      ).map((p_model) => p_model.modelId),
-    ).toEqual(["high-score", "top-rank"]);
+      f_sortModels([vl_coder, vl_thinker], "intelligenceScore", "desc").map(
+        (p_model) => p_model.modelId,
+      ),
+    ).toEqual(["thinker", "coder"]);
   });
 
-  test("keeps missing benchmark ranks last in both directions", () => {
-    const vl_ranked = f_createTestModel({
-      modelId: "ranked",
+  test("keeps missing benchmark scores last in both directions", () => {
+    const vl_scored = f_createTestModel({
+      modelId: "scored",
       benchmarks: [
-        f_createTestBenchmark("llbm", 75, {
-          sourceModelId: "ranked",
-          rank: 3,
-        }),
+        f_createTestBenchmark("llbmCoding", 75, { sourceModelId: "scored" }),
+      ],
+    });
+    // Intelligence-only: missing for the coding column.
+    const vl_other = f_createTestModel({
+      modelId: "other",
+      benchmarks: [
+        f_createTestBenchmark("llbmIntelligence", 50, { sourceModelId: "other" }),
       ],
     });
     const vl_missing = f_createTestModel({ modelId: "missing" });
@@ -129,11 +130,11 @@ describe("f_sortModels", () => {
     for (const vl_direction of ["asc", "desc"] as const) {
       expect(
         f_sortModels(
-          [vl_missing, vl_ranked],
-          "llbmRank",
+          [vl_missing, vl_other, vl_scored],
+          "codingScore",
           vl_direction,
         ).map((p_model) => p_model.modelId),
-      ).toEqual(["ranked", "missing"]);
+      ).toEqual(["scored", "missing", "other"]);
     }
   });
 
@@ -169,118 +170,5 @@ describe("f_sortModels", () => {
   test("f_compareModels reflects missing-last semantics", () => {
     expect(f_compareModels(k_unknownPrice, k_cheap, "inputPrice", "asc")).toBe(1);
     expect(f_compareModels(k_cheap, k_unknownPrice, "inputPrice", "desc")).toBe(-1);
-  });
-});
-
-describe("f_assignBenchmarkRanks", () => {
-  test("uses competition ranking for ties and skips positions", () => {
-    const vl_models = [
-      f_createTestModel({
-        modelId: "a",
-        benchmarks: [f_createTestBenchmark("llbm", 90, { sourceModelId: "a" })],
-      }),
-      f_createTestModel({
-        modelId: "b",
-        benchmarks: [f_createTestBenchmark("llbm", 90, { sourceModelId: "b" })],
-      }),
-      f_createTestModel({
-        modelId: "c",
-        benchmarks: [f_createTestBenchmark("llbm", 80, { sourceModelId: "c" })],
-      }),
-    ];
-
-    const vl_ranked = f_assignBenchmarkRanks(vl_models);
-
-    expect(vl_ranked.map((p_model) => p_model.benchmarks[0]?.rank)).toEqual([
-      1, 1, 3,
-    ]);
-    expect(vl_models.map((p_model) => p_model.benchmarks[0]?.rank)).toEqual([
-      null, null, null,
-    ]);
-  });
-
-  test("never assigns a rank to a missing score", () => {
-    const vl_models = [
-      f_createTestModel({
-        modelId: "no-score",
-        benchmarks: [
-          f_createTestBenchmark("llbm", null, { sourceModelId: "no-score" }),
-        ],
-      }),
-      f_createTestModel({ modelId: "no-row" }),
-    ];
-
-    const vl_ranked = f_assignBenchmarkRanks(vl_models);
-
-    expect(vl_ranked[0]?.benchmarks[0]?.rank).toBeNull();
-    expect(vl_ranked[1]?.benchmarks).toEqual([]);
-  });
-
-  test("clears a stale rank when the score is null", () => {
-    const vl_model = f_createTestModel({
-      modelId: "stale",
-      benchmarks: [
-        f_createTestBenchmark("llbm", null, {
-          sourceModelId: "stale",
-          rank: 4,
-        }),
-      ],
-    });
-
-    const vl_ranked = f_assignBenchmarkRanks([vl_model]);
-
-    expect(vl_ranked[0]?.benchmarks[0]?.rank).toBeNull();
-  });
-
-  test("ranks each benchmark independently", () => {
-    const vl_models = [
-      f_createTestModel({
-        modelId: "a",
-        benchmarks: [
-          f_createTestBenchmark("llbm", 90, { sourceModelId: "a" }),
-        ],
-      }),
-      f_createTestModel({
-        modelId: "b",
-        benchmarks: [
-          f_createTestBenchmark("llbm", 80, { sourceModelId: "b" }),
-        ],
-      }),
-    ];
-
-    const vl_ranked = f_assignBenchmarkRanks(vl_models);
-
-    expect(
-      vl_ranked[0]?.benchmarks.map((p_entry) => [
-        p_entry.benchmarkId,
-        p_entry.rank,
-      ]),
-    ).toEqual([
-      ["llbm", 1],
-    ]);
-    expect(
-      vl_ranked[1]?.benchmarks.map((p_entry) => [
-        p_entry.benchmarkId,
-        p_entry.rank,
-      ]),
-    ).toEqual([
-      ["llbm", 2],
-    ]);
-  });
-
-  test("returns the same records when every rank is already correct", () => {
-    const vl_model = f_createTestModel({
-      modelId: "stable",
-      benchmarks: [
-        f_createTestBenchmark("llbm", 88, {
-          sourceModelId: "stable",
-          rank: 1,
-        }),
-      ],
-    });
-
-    const vl_ranked = f_assignBenchmarkRanks([vl_model]);
-
-    expect(vl_ranked[0]).toBe(vl_model);
   });
 });

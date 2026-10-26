@@ -206,6 +206,33 @@
         "observedAt": "2026-10-25",
         "sourceUrl": "https://matharena.ai/",
         "setting": "think"
+      },
+      {
+        "modelId": "anthropic/claude-fable-5",
+        "source": "artificialanalysis",
+        "metric": "aa_intelligence_index",
+        "value": 49.6,
+        "unit": "points",
+        "observedAt": "2026-10-26",
+        "sourceUrl": "https://artificialanalysis.ai/models"
+      },
+      {
+        "modelId": "moonshotai/kimi-k2.6",
+        "source": "artificialanalysis",
+        "metric": "aa_intelligence_index",
+        "value": 27,
+        "unit": "points",
+        "observedAt": "2026-10-26",
+        "sourceUrl": "https://artificialanalysis.ai/models"
+      },
+      {
+        "modelId": "openai/gpt-5.2",
+        "source": "artificialanalysis",
+        "metric": "aa_intelligence_index",
+        "value": 30.4,
+        "unit": "points",
+        "observedAt": "2026-10-26",
+        "sourceUrl": "https://artificialanalysis.ai/models"
       }
     ],
     "generatedAt": "2026-10-25T04:16:17.448Z"

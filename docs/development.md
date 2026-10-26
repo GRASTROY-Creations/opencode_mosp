@@ -27,11 +27,13 @@ bun test
 
 `bun run validate:mappings` (scripts/validate-mappings.ts) re-checks the
 reviewed LLMBM mappings (`src/config/llbm-mappings.ts`) against the live
-LLMBM `/v1/export` scored set and the location catalog (`--skip-catalog` to
-omit the latter). `bun run generate:mappings` (scripts/generate-mappings.ts)
-regenerates the mapping table from the live scored set and prints a review
-table before the emitted TypeScript is adopted. Both need network access and
-are intentionally NOT part of `bun run check` or CI.
+LLMBM `/v1/export` (both displayed metrics, parsed by the production adapter)
+and the location catalog (`--skip-catalog` to omit the latter), reporting
+PASS / PENDING / DRIFT. `bun run generate:mappings`
+(scripts/generate-mappings.ts) regenerates the mapping table from the live
+data and prints a review table before the emitted TypeScript is adopted.
+Shared fetch/catalog helpers live in `scripts/live-data.ts`. Both scripts need
+network access and are intentionally NOT part of `bun run check` or CI.
 
 ## Version policy result (spec §5.2)
 
@@ -69,17 +71,14 @@ Additions required by the real toolchain (strictness was **not** weakened):
 
 ## direnv notes (spec §5.5, §2.1)
 
-- `.envrc` holds safe defaults only; credentials (`HUGGINGFACE_TOKEN`, `OPENCODE_INFERENCE_API_KEY`) are commented out and must be exported locally, never committed.
+- `.envrc` holds safe defaults only; the one optional credential (`OPENCODE_INFERENCE_API_KEY`, for the not-yet-implemented inference catalog) is commented out and must be exported locally, never committed. No current source needs authentication.
+- The LLMBM metrics are fixed (`aa_coding_index`, `aa_intelligence_index`); the former `OPENCODE_LLM_BENCH_METRIC` override was removed in Adjustment 22.
 - `OPENCODE_MODEL_OVERVIEW_HEADER_COLLAPSE` is an opt-in UI flag (default off): truthy values enable header-click collapse of the overview panel; when off, the panel always starts expanded and the header click is a no-op. Like all env vars, it must be exported in the environment that launches the TUI.
 - direnv loads variables into the **dev shell**. It does **not** automatically expose them to every OpenCode process (e.g. GUI launches). The plugin must read its environment at actual runtime and degrade gracefully when variables are absent.
 
 ## Loading the plugin during development
 
 `.opencode/plugins/` is the project-local plugin directory, and OpenCode auto-loads it. A project plugin uses the published-package layout: a **directory** containing `index.ts` (server) and `tui.ts` (TUI). This repo has `.opencode/plugins/model-overview/index.ts` (inert server stub) and `.opencode/plugins/model-overview/tui.ts` (re-exports `src/tui.tsx`), so there is exactly one copy of plugin logic. A **flat** `.opencode/plugins/<name>.ts` is treated as a server plugin only and fails if it pulls in TUI/JSX code. Published usage uses the package `./tui` export plus `cli.json` `plugins` (terminal-only) or `opencode.json` `plugins`. Details and the verification checklist: `docs/architecture/ui-integration.md`.
-
-## Planned scripts
-
-`refresh:benchmarks` and `validate:data` scripts arrive in Phase 3 (adapters) — added to `package.json` together with their `scripts/*.ts` files so no dangling script entries exist.
 
 ## CI
 

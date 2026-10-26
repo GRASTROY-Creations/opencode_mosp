@@ -48,7 +48,7 @@ export function f_isNonNegativeInteger(p_value: unknown): p_value is number {
   return typeof p_value === "number" && Number.isInteger(p_value) && p_value >= 0;
 }
 
-/** True for integers greater than or equal to one (1-based ranks). */
+/** True for integers greater than or equal to one (e.g. context windows). */
 export function f_isPositiveInteger(p_value: unknown): p_value is number {
   return typeof p_value === "number" && Number.isInteger(p_value) && p_value >= 1;
 }
@@ -137,7 +137,7 @@ export function f_parseNullableNonNegativeNumber(
   return f_ok(p_value);
 }
 
-/** Parse an optional 1-based integer rank. */
+/** Parse an optional positive integer (e.g. a context window in tokens). */
 export function f_parseNullablePositiveInteger(
   p_value: unknown,
   p_field: string,

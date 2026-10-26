@@ -21,7 +21,7 @@ import {
 } from "../domain/source-status";
 
 /** Bump when the envelope or any cached payload shape changes. */
-export const k_cacheSchemaVersion = 1;
+export const k_cacheSchemaVersion = 2;
 
 /** Default model/pricing TTL: one hour (`OPENCODE_MODEL_CACHE_TTL_SECONDS`). */
 export const k_defaultModelCacheTtlMs = 60 * 60 * 1000;

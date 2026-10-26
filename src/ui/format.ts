@@ -25,12 +25,6 @@ export function f_formatScore(p_value: number | null): string {
   return p_value.toFixed(1);
 }
 
-/** Format a 1-based ranking position. */
-export function f_formatRank(p_value: number | null): string {
-  if (p_value === null) return "—";
-  return `#${p_value}`;
-}
-
 /** Format an ISO timestamp for compact display; `null` means "never". */
 export function f_formatTimestamp(p_value: string | null): string {
   if (p_value === null) return "never";
