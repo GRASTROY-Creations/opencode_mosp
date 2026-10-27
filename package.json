@@ -1,6 +1,6 @@
 {
   "name": "opencode_mosp",
-  "version": "0.1.18",
+  "version": "1.2.23",
   "private": true,
   "description": "OpenCode model pricing and benchmark overview",
   "author": "GRASTROY Creations, Korcakov Roman",
@@ -35,7 +35,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "bun run typecheck && bun run lint && bun run format:check && bun run test",
-    "pack:plugin": "bun pm pack --destination ./dist"
+    "pack:plugin": "bun pm pack --destination ./dist",
+    "version:update": "bun scripts/update-version.ts"
   },
   "dependencies": {
     "@opencode/plugin": "2.2.0"

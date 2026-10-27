@@ -5,7 +5,7 @@ available to your OpenCode installation: provider, context window, input/output
 price (USD per 1M tokens), and two LLMBenchmark.ai scores — the Artificial
 Analysis **coding index** and **intelligence index**.
 
-- Version 0.1.18 · MIT · GRASTROY Creations, Korcakov Roman
+- Version 0.1.23 · MIT · GRASTROY Creations, Korcakov Roman
 - Target: OpenCode 2.2.0 (`@opencode/plugin` 2.2.0), Bun 1.4.x
 - Documentation: [`.docs/README.md`](.docs/README.md) (goals, guide, decisions, tests, examples)
 - Data licensing for the benchmark scores is unverified — see
@@ -46,6 +46,13 @@ mkdir -p ~/.config/opencode/plugins/opencode_mosp
 tar -xzf opencode_mosp-*.tgz -C ~/.config/opencode/plugins/opencode_mosp --strip-components=1
 ```
 
+Install production dependencies (skips devDependencies):
+
+```bash
+cd ~/.config/opencode/plugins/opencode_mosp
+bun install --production
+```
+
 Then add it to `~/.config/opencode/opencode.jsonc`:
 
 ```jsonc
@@ -63,8 +70,10 @@ Or reference it by absolute/path entry as shown above. You can also extract dire
 Extract into your project and add to `opencode.jsonc`:
 
 ```bash
-mkdir -p .opencode/plugins
+mkdir -p .opencode/plugins/opencode_mosp
 tar -xzf opencode_mosp-*.tgz -C .opencode/plugins/opencode_mosp --strip-components=1
+cd .opencode/plugins/opencode_mosp
+bun install --production
 ```
 
 ```jsonc
