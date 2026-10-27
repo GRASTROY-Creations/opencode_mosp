@@ -6,7 +6,7 @@ price (USD per 1M tokens), and two LLMBenchmark.ai scores — the Artificial
 Analysis **coding index** and **intelligence index**.
 
 - Version 0.1.18 · MIT · GRASTROY Creations, Korcakov Roman
-- Target: OpenCode 2.1.4 (`@opencode/plugin` 2.1.4), Bun 1.4.x
+- Target: OpenCode 2.2.0 (`@opencode/plugin` 2.2.0), Bun 1.4.x
 - Documentation: [`.docs/README.md`](.docs/README.md) (goals, guide, decisions, tests, examples)
 - Data licensing for the benchmark scores is unverified — see
   [`.docs/decisions/D-0029`](.docs/decisions/D-0029-data-source-licensing.md)
@@ -35,6 +35,53 @@ The panel opens with `/mosp` (or `/mosp toggle`). Other commands:
 Click a column header to sort; clicking again flips the direction. The
 `[update]` button at the right end of the filter row does the same as
 `/mosp update` — use it when the panel opens without models.
+
+## Installation
+
+### Global (available in all projects)
+Extract the packed plugin into OpenCode's global plugins directory:
+
+```bash
+mkdir -p ~/.config/opencode/plugins/opencode_mosp
+tar -xzf opencode_mosp-*.tgz -C ~/.config/opencode/plugins/opencode_mosp --strip-components=1
+```
+
+Then add it to `~/.config/opencode/opencode.jsonc`:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "~/.config/opencode/plugins/opencode_mosp"
+  ]
+}
+```
+
+Or reference it by absolute/path entry as shown above. You can also extract directly into `~/.config/opencode/plugins/` without creating a subdirectory, but putting it in its own folder keeps things organized.
+
+### Project-local
+Extract into your project and add to `opencode.jsonc`:
+
+```bash
+mkdir -p .opencode/plugins
+tar -xzf opencode_mosp-*.tgz -C .opencode/plugins/opencode_mosp --strip-components=1
+```
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "./.opencode/plugins/opencode_mosp"
+  ]
+}
+```
+
+### Pack it yourself
+```bash
+bun install
+bun run pack:plugin
+# outputs dist/opencode_mosp-*.tgz
+```
 
 ## Development
 
